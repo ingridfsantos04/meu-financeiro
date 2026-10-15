@@ -26,6 +26,16 @@ except Exception:  # pragma: no cover
 APP_NOME = "Meu Financeiro"
 APP_SLOGAN = "Gestão patrimonial segura, simples e inteligente"
 
+# Link de checkout para quem ainda não é cliente
+LINK_COMPRA = "https://pay.kiwify.com.br/z9ynIE5"
+
+# Foto de apresentação do sistema (mostrada na tela de login).
+# Salve a imagem com UM destes nomes na mesma pasta do app.py (ou dentro de /assets).
+IMAGENS_APRESENTACAO = [
+    "foto_sistema.png", "foto_sistema.jpg", "foto_sistema.jpeg", "foto_sistema.webp",
+    "assets/foto_sistema.png", "assets/foto_sistema.jpg", "assets/foto_sistema.jpeg", "assets/foto_sistema.webp",
+]
+
 # ==============================================================================
 # CONFIGURAÇÃO DA PÁGINA (precisa ser o primeiro comando do Streamlit)
 # ==============================================================================
@@ -423,21 +433,37 @@ html, body, .stApp, .stMarkdown, p, label, button, input, textarea, select, h1, 
 h1, h2, h3, h4 { color: var(--ink) !important; letter-spacing: -.02em; font-weight: 800 !important; }
 ::selection { background: rgba(20,184,166,.25); }
 
-/* Esconde a marca padrão do Streamlit */
-#MainMenu, footer, [data-testid="stDecoration"], .stDeployButton, [data-testid="stToolbar"] { display: none !important; }
-[data-testid="stHeader"] { background: transparent !important; }
+/* Esconde a marca padrão do Streamlit (SEM esconder o botão de abrir/fechar a sidebar) */
+#MainMenu, footer, [data-testid="stDecoration"], .stDeployButton,
+[data-testid="stAppDeployButton"], [data-testid="stMainMenu"], [data-testid="stToolbarActions"] { display: none !important; }
+[data-testid="stHeader"] { background: transparent !important; visibility: visible !important; }
+[data-testid="stToolbar"] { visibility: visible !important; background: transparent !important; }
 
-/* Botão de abrir a sidebar sempre visível */
-[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {
+/* Botão de abrir a sidebar SEMPRE visível (todas as versões do Streamlit) */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stExpandSidebarButton"] {
   display: flex !important; visibility: visible !important; opacity: 1 !important;
-  z-index: 999999 !important; top: 0.8rem !important; left: 0.8rem !important;
+  z-index: 999999 !important;
 }
-[data-testid="collapsedControl"] button, [data-testid="stSidebarCollapsedControl"] button {
-  display: flex !important; visibility: visible !important;
+[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {
+  position: fixed !important; top: 0.8rem !important; left: 0.8rem !important;
+}
+[data-testid="collapsedControl"] button, [data-testid="stSidebarCollapsedControl"] button,
+[data-testid="stExpandSidebarButton"], [data-testid="stExpandSidebarButton"] button {
+  display: flex !important; visibility: visible !important; opacity: 1 !important;
   background-color: var(--navy) !important; border: 1.5px solid var(--brand-2) !important;
   color: #FFFFFF !important; border-radius: 10px !important; box-shadow: 0 4px 14px rgba(0,0,0,.25) !important;
 }
-[data-testid="collapsedControl"] svg, [data-testid="stSidebarCollapsedControl"] svg { fill: #FFFFFF !important; color: #FFFFFF !important; }
+[data-testid="collapsedControl"] svg, [data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="stExpandSidebarButton"] svg, [data-testid="stExpandSidebarButton"] span {
+  fill: #FFFFFF !important; color: #FFFFFF !important;
+}
+/* Botão de recolher dentro da sidebar também sempre visível */
+[data-testid="stSidebarCollapseButton"], [data-testid="stSidebarCollapseButton"] button {
+  visibility: visible !important; opacity: 1 !important;
+}
+[data-testid="stSidebarCollapseButton"] svg { fill: #FFFFFF !important; color: #FFFFFF !important; }
 
 /* ---------- Hero ---------- */
 .hero-box {
@@ -524,6 +550,10 @@ section[data-testid="stSidebar"] button { background: linear-gradient(135deg, #1
 section[data-testid="stSidebar"] button p { color: #042F2E !important; font-weight: 700 !important; }
 section[data-testid="stSidebar"] input { background: rgba(255,255,255,.07) !important; color: #FFFFFF !important; border: 1px solid rgba(255,255,255,.14) !important; border-radius: 10px !important; }
 section[data-testid="stSidebar"] [data-baseweb="input"], section[data-testid="stSidebar"] [data-baseweb="base-input"] { background: transparent !important; border-radius: 10px !important; }
+/* Botão de recolher da sidebar: estilo discreto (não herda o verde dos botões) */
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button {
+  background: rgba(255,255,255,.08) !important; border: 1px solid rgba(255,255,255,.18) !important; box-shadow: none !important;
+}
 /* Textos da sidebar bem legíveis (prioridade maior que a regra global de rótulos) */
 section[data-testid="stSidebar"] label p,
 section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
@@ -637,7 +667,8 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
 }
 .stButton > button[kind="secondary"]:hover, [data-testid="stBaseButton-secondary"]:hover { border-color: var(--brand-2) !important; color: var(--brand) !important; }
 section[data-testid="stSidebar"] .stButton > button[kind="secondary"], section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] { background: rgba(255,255,255,.08) !important; border: 1px solid rgba(255,255,255,.14) !important; box-shadow: none !important; }
-[data-testid="stBaseLinkButton-secondary"] { border-radius: 10px !important; font-weight: 600 !important; border: 1px solid var(--line) !important; background: #fff !important; }
+[data-testid="stBaseLinkButton-secondary"], [data-testid="stBaseLinkButton-primary"] { border-radius: 10px !important; font-weight: 600 !important; }
+[data-testid="stBaseLinkButton-secondary"] { border: 1px solid var(--line) !important; background: #fff !important; }
 
 .stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .stTabs [data-baseweb="tab"] { height: 44px; padding: 0 16px; border-radius: 10px 10px 0 0; font-weight: 600; color: var(--ink-3); }
@@ -678,99 +709,110 @@ hr { border-color: var(--line) !important; }
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# TELA DE LOGIN & CADASTRO
+# TELA DE LOGIN (ACESSO EXCLUSIVO PARA CLIENTES + BOTÃO DE COMPRA)
 # ==============================================================================
 if "auth_user" not in st.session_state:
     st.session_state["auth_user"] = None
 if "auth_nome" not in st.session_state:
     st.session_state["auth_nome"] = ""
 
+def _caminho_foto_sistema():
+    base = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+    for nome in IMAGENS_APRESENTACAO:
+        for raiz in (base, os.getcwd()):
+            p = os.path.join(raiz, nome)
+            if os.path.exists(p):
+                return p
+    return None
+
 def render_tela_login():
     st.markdown("""
     <style>
     .stApp { background: radial-gradient(1100px 600px at 8% 0%, #D9F3EF 0%, rgba(217,243,239,0) 60%),
                          radial-gradient(900px 500px at 100% 100%, #DCE8FB 0%, rgba(220,232,251,0) 60%), #F4F6FA !important; }
-    .block-container { max-width: 1120px !important; padding-top: 4.5rem !important; }
-    section[data-testid="stSidebar"], [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+    .block-container { max-width: 1080px !important; padding-top: 2.2rem !important; }
+    section[data-testid="stSidebar"], [data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stExpandSidebarButton"] { display: none !important; }
+    .lg-top { text-align:center; margin-bottom: 1.2rem; }
     .lg-badge { display:inline-flex; align-items:center; gap:8px; background:#fff; border:1px solid #E5E9F0; border-radius:999px; padding:6px 14px; font-size:.76rem; font-weight:700; color:#0F766E; box-shadow:0 1px 3px rgba(11,18,32,.06); }
-    .lg-h { font-size:2.7rem; font-weight:900; letter-spacing:-.04em; line-height:1.08; color:#0B1220; margin:1.1rem 0 .9rem; }
+    .lg-h { font-size:2.5rem; font-weight:900; letter-spacing:-.04em; line-height:1.1; color:#0B1220; margin:1rem 0 .7rem; }
     .lg-h span { background:linear-gradient(120deg,#0F766E,#14B8A6); -webkit-background-clip:text; background-clip:text; color:transparent; }
-    .lg-p { font-size:1.02rem; color:#475569; line-height:1.65; max-width:470px; }
-    .lg-f { display:flex; gap:14px; align-items:flex-start; margin-top:1.15rem; }
-    .lg-ic { width:38px; height:38px; border-radius:11px; background:#fff; border:1px solid #E5E9F0; display:grid; place-items:center; font-size:1.05rem; box-shadow:0 1px 3px rgba(11,18,32,.06); flex-shrink:0; }
-    .lg-ft { font-weight:700; color:#0B1220; font-size:.93rem; }
-    .lg-fd { color:#64748B; font-size:.84rem; margin-top:1px; line-height:1.45; }
+    .lg-p { font-size:1.02rem; color:#475569; line-height:1.65; max-width:640px; margin:0 auto; }
+    .lg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin: 1.6rem 0 1.8rem; }
+    .lg-card { background:#fff; border:1px solid #E5E9F0; border-radius:16px; padding:1.1rem 1.2rem; box-shadow:0 1px 3px rgba(11,18,32,.06); }
+    .lg-ic { width:38px; height:38px; border-radius:11px; background:#E6F6F4; display:grid; place-items:center; font-size:1.1rem; margin-bottom:.6rem; }
+    .lg-ft { font-weight:800; color:#0B1220; font-size:.95rem; }
+    .lg-fd { color:#64748B; font-size:.84rem; margin-top:3px; line-height:1.5; }
     .lg-logo { width:54px; height:54px; border-radius:16px; background:linear-gradient(135deg,#14B8A6,#0F766E); display:grid; place-items:center; font-size:1.15rem; font-weight:800; color:#FFFFFF; letter-spacing:.02em; margin:0 auto 12px; box-shadow:0 12px 26px -8px rgba(15,118,110,.5); }
+    [data-testid="stImage"] img { border-radius: 20px; box-shadow: 0 24px 50px -20px rgba(11,18,32,.35); }
     </style>
     """, unsafe_allow_html=True)
 
-    col_info, col_form = st.columns([1.15, 1], gap="large")
-
-    with col_info:
+    # --- 1) FOTO DO SISTEMA NO COMEÇO ---
+    foto = _caminho_foto_sistema()
+    if foto:
+        st.image(foto, use_container_width=True)
+    else:
         md(f"""
-        <div class="lg-badge">{APP_NOME}</div>
-        <div class="lg-h">Todo o seu dinheiro, <span>sob controle.</span></div>
-        <div class="lg-p">{APP_SLOGAN}. Acompanhe patrimônio, investimentos, cartão, contas e metas em um só painel, de qualquer dispositivo.</div>
-        <div class="lg-f"><div class="lg-ic">📈</div><div><div class="lg-ft">Carteira em tempo real</div><div class="lg-fd">Ações, FIIs, cripto e dólar com cotações atualizadas automaticamente.</div></div></div>
-        <div class="lg-f"><div class="lg-ic">📅</div><div><div class="lg-ft">Calendário de vencimentos</div><div class="lg-fd">Contas fixas, faturas do cartão e cobranças a receber organizadas por data.</div></div></div>
-        <div class="lg-f"><div class="lg-ic">🎯</div><div><div class="lg-ft">Metas e diagnóstico mensal</div><div class="lg-fd">Saiba quanto pode gastar com segurança e receba o relatório por e-mail.</div></div></div>
+        <div class="lg-top">
+          <div class="lg-logo">MF</div>
+          <div style="font-size:1.6rem;font-weight:900;color:#0B1220;letter-spacing:-.03em">{APP_NOME}</div>
+        </div>
         """)
 
-    with col_form:
-        md(f"""
+    # --- 2) IMPORTÂNCIA DA ORGANIZAÇÃO FINANCEIRA ---
+    md(f"""
+    <div class="lg-top">
+      <div class="lg-badge">{APP_NOME}</div>
+      <div class="lg-h">Organizar o dinheiro é o primeiro passo para <span>conquistar sua liberdade.</span></div>
+      <div class="lg-p">{APP_SLOGAN}. Quem sabe exatamente quanto ganha, quanto deve e para onde o dinheiro vai toma decisões melhores, evita dívidas e constrói patrimônio com tranquilidade.</div>
+    </div>
+    <div class="lg-grid">
+      <div class="lg-card"><div class="lg-ic">🎯</div><div class="lg-ft">Clareza para decidir</div><div class="lg-fd">Veja num só painel investimentos, cartão, contas, caixinhas e metas, sem planilhas espalhadas.</div></div>
+      <div class="lg-card"><div class="lg-ic">🛡️</div><div class="lg-ft">Fim dos sustos</div><div class="lg-fd">Calendário de vencimentos e diagnóstico do mês mostram o que você pode gastar com segurança.</div></div>
+      <div class="lg-card"><div class="lg-ic">📈</div><div class="lg-ft">Patrimônio crescendo</div><div class="lg-fd">Acompanhe ações, FIIs, cripto e dólar em tempo real e defina metas de patrimônio e renda.</div></div>
+      <div class="lg-card"><div class="lg-ic">📱</div><div class="lg-ft">Em qualquer lugar</div><div class="lg-fd">Acesse do computador ou do celular, com seus dados protegidos e isolados na nuvem.</div></div>
+    </div>
+    """)
+
+    # --- 3) LOGIN OU COMPRA, EMBAIXO ---
+    c_center = st.columns([1, 1.5, 1])[1]
+    with c_center:
+        md("""
         <div style="text-align:center;margin-bottom:1rem">
-          <div class="lg-logo">MF</div>
-          <div style="font-size:1.45rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">Bem-vindo(a)</div>
-          <div style="font-size:.88rem;color:#64748B;margin-top:2px">Acesse sua conta ou crie uma nova em segundos</div>
+          <div style="font-size:1.35rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">Acesso exclusivo para membros</div>
+          <div style="font-size:.88rem;color:#64748B;margin-top:2px">Entre com sua conta ou adquira sua licença</div>
         </div>
         """)
 
         with st.container(border=True):
-            aba_login, aba_cadastro = st.tabs(["Entrar", "Criar conta"])
+            st.markdown("#### 🔑 Acessar minha conta")
+            with st.form("form_login"):
+                email_login = st.text_input("E-mail cadastrado", placeholder="seu.email@exemplo.com").strip().lower()
+                senha_login = st.text_input("Sua senha", type="password", placeholder="Digite sua senha")
+                btn_entrar = st.form_submit_button("Entrar no painel", use_container_width=True, type="primary")
 
-            with aba_login:
-                with st.form("form_login"):
-                    email_login = st.text_input("E-mail", placeholder="seu.email@exemplo.com").strip().lower()
-                    senha_login = st.text_input("Senha", type="password", placeholder="Sua senha de acesso")
-                    btn_entrar = st.form_submit_button("Acessar meu painel", use_container_width=True, type="primary")
+                if btn_entrar:
+                    if not email_login or not senha_login:
+                        st.error("Preencha o e-mail e a senha.")
+                    else:
+                        try:
+                            res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
+                            if res.user and res.session:
+                                st.session_state["auth_user"] = res.user
+                                st.session_state["auth_session"] = res.session
+                                supabase.auth.set_session(res.session.access_token, res.session.refresh_token)
+                                st.rerun()
+                        except Exception:
+                            st.error("E-mail ou senha incorretos, ou sua licença ainda não foi ativada.")
 
-                    if btn_entrar:
-                        if not email_login or not senha_login:
-                            st.error("Preencha o e-mail e a senha.")
-                        else:
-                            try:
-                                res = supabase.auth.sign_in_with_password({"email": email_login, "password": senha_login})
-                                if res.user and res.session:
-                                    st.session_state["auth_user"] = res.user
-                                    st.session_state["auth_session"] = res.session
-                                    supabase.auth.set_session(res.session.access_token, res.session.refresh_token)
-                                    st.rerun()
-                            except Exception:
-                                st.error("E-mail ou senha incorretos. Confira os dados e tente novamente.")
+            st.divider()
 
-            with aba_cadastro:
-                with st.form("form_cadastro"):
-                    nome_cad = st.text_input("Seu nome completo", placeholder="Ex: Maria Silva").strip()
-                    email_cad = st.text_input("E-mail de acesso", placeholder="seu.email@exemplo.com").strip().lower()
-                    senha_cad = st.text_input("Criar uma senha (mínimo 6 dígitos)", type="password")
-                    btn_cadastrar = st.form_submit_button("Criar minha conta", use_container_width=True, type="primary")
+            # Quem não é cliente vê isto:
+            st.markdown("<p style='text-align:center;font-size:0.88rem;color:#64748B;margin-bottom:8px'>Ainda não tem sua licença de acesso?</p>", unsafe_allow_html=True)
+            st.link_button("👉 Adquira seu acesso aqui", LINK_COMPRA, use_container_width=True, type="primary")
 
-                    if btn_cadastrar:
-                        if not nome_cad or not email_cad or len(senha_cad) < 6:
-                            st.error("Preencha todos os campos. A senha deve ter no mínimo 6 caracteres.")
-                        else:
-                            try:
-                                res = supabase.auth.sign_up({
-                                    "email": email_cad,
-                                    "password": senha_cad,
-                                    "options": {"data": {"nome": nome_cad}}
-                                })
-                                if res.user:
-                                    st.success("Conta criada com sucesso. Acesse a aba Entrar para fazer login.")
-                            except Exception:
-                                st.error("Não foi possível criar a conta. Verifique se o e-mail já está em uso ou tente novamente em instantes.")
-
-        st.markdown("<p style='text-align:center;font-size:0.76rem;color:#94A3B8;margin-top:1.1rem'>🔒 Seus dados financeiros são isolados por usuário e armazenados na nuvem.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center;font-size:0.75rem;color:#94A3B8;margin-top:1.2rem'>🔒 Ambiente seguro e blindado contra acessos não autorizados.</p>", unsafe_allow_html=True)
 
 if st.session_state["auth_user"] is None:
     render_tela_login()
