@@ -687,6 +687,11 @@ section[data-testid="stSidebar"] .stButton > button[kind="secondary"], section[d
 [data-testid="stExpander"] details, [data-testid="stExpander"] summary { border: none !important; }
 [data-testid="stExpander"] summary p { font-weight: 700 !important; color: var(--ink) !important; font-size: .92rem !important; }
 
+/* Expander dentro da sidebar (alterar senha): visual escuro, integrado ao menu */
+section[data-testid="stSidebar"] [data-testid="stExpander"] { background: rgba(255,255,255,.04) !important; border: 1px solid rgba(255,255,255,.1) !important; box-shadow: none !important; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary p { color: #E2E8F0 !important; }
+section[data-testid="stSidebar"] [data-testid="stForm"] { background: transparent !important; border: none !important; padding: .2rem 0 0 !important; box-shadow: none !important; }
+
 [data-testid="stForm"] { border: 1px solid var(--line) !important; border-radius: var(--r-lg) !important; background: var(--paper); padding: 1.3rem !important; box-shadow: var(--sh-xs); }
 [data-testid="stAlert"] { border-radius: var(--r-md) !important; }
 [data-testid="stPopover"] > div > button, div[data-testid="stPopover"] button { border-radius: 10px !important; }
@@ -1147,6 +1152,32 @@ with st.sidebar:
 
     st.markdown("<hr style='border:none;border-top:1px solid rgba(255,255,255,.1);margin:1.5rem 0 1rem 0'>", unsafe_allow_html=True)
     st.markdown(f"<div class='side-user'>Conectado como<br><b>{html.escape(EMAIL_USUARIO_LOGADO)}</b><br><span style='color:#34D399 !important'>● Banco online sincronizado</span></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # ALTERAR MINHA SENHA (o cliente troca a própria senha pelo painel)
+    # --------------------------------------------------------------------------
+    with st.expander("🔒 Alterar minha senha"):
+        with st.form("form_alt_senha", clear_on_submit=True):
+            nova_senha = st.text_input("Nova senha (mínimo 6 caracteres)", type="password", placeholder="Digite a nova senha")
+            conf_senha = st.text_input("Confirme a nova senha", type="password", placeholder="Repita a nova senha")
+            btn_salvar_senha = st.form_submit_button("Atualizar senha", use_container_width=True)
+
+            if btn_salvar_senha:
+                if len(nova_senha) < 6:
+                    st.error("A senha precisa ter pelo menos 6 caracteres.")
+                elif nova_senha != conf_senha:
+                    st.error("As senhas não coincidem.")
+                else:
+                    try:
+                        # Garante que a sessão ativa do usuário está carregada antes de atualizar
+                        sess = st.session_state.get("auth_session")
+                        if sess:
+                            supabase.auth.set_session(sess.access_token, sess.refresh_token)
+                        # Atualiza a senha usando a sessão ativa do usuário no Supabase
+                        supabase.auth.update_user({"password": nova_senha})
+                        st.success("Senha alterada com sucesso! Use ela nos próximos logins.")
+                    except Exception:
+                        st.error("Erro ao alterar senha. Tente novamente ou saia e entre de novo na conta.")
 
     if st.button("Sair da conta", use_container_width=True):
         try:
