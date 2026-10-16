@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -436,24 +437,28 @@ h1, h2, h3, h4 { color: var(--ink) !important; letter-spacing: -.02em; font-weig
 /* Esconde a marca padrão do Streamlit (SEM esconder o botão de abrir/fechar a sidebar) */
 #MainMenu, footer, [data-testid="stDecoration"], .stDeployButton,
 [data-testid="stAppDeployButton"], [data-testid="stMainMenu"], [data-testid="stToolbarActions"] { display: none !important; }
-[data-testid="stHeader"] { background: transparent !important; visibility: visible !important; }
+[data-testid="stHeader"] {
+  background: transparent !important; visibility: visible !important;
+  z-index: 999990 !important; pointer-events: none !important;
+}
+[data-testid="stHeader"] > * { pointer-events: auto !important; }
 [data-testid="stToolbar"] { visibility: visible !important; background: transparent !important; }
 
-/* Botão de abrir a sidebar SEMPRE visível (todas as versões do Streamlit) */
+/* ---------- Botão de ABRIR a sidebar: sempre visível e fixo na tela ---------- */
 [data-testid="collapsedControl"],
 [data-testid="stSidebarCollapsedControl"],
 [data-testid="stExpandSidebarButton"] {
   display: flex !important; visibility: visible !important; opacity: 1 !important;
-  z-index: 999999 !important;
-}
-[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"] {
   position: fixed !important; top: 0.8rem !important; left: 0.8rem !important;
+  z-index: 999999 !important; pointer-events: auto !important;
+  width: auto !important; height: auto !important; transform: none !important;
 }
 [data-testid="collapsedControl"] button, [data-testid="stSidebarCollapsedControl"] button,
 [data-testid="stExpandSidebarButton"], [data-testid="stExpandSidebarButton"] button {
   display: flex !important; visibility: visible !important; opacity: 1 !important;
   background-color: var(--navy) !important; border: 1.5px solid var(--brand-2) !important;
   color: #FFFFFF !important; border-radius: 10px !important; box-shadow: 0 4px 14px rgba(0,0,0,.25) !important;
+  pointer-events: auto !important;
 }
 [data-testid="collapsedControl"] svg, [data-testid="stSidebarCollapsedControl"] svg,
 [data-testid="stExpandSidebarButton"] svg, [data-testid="stExpandSidebarButton"] span {
@@ -461,7 +466,7 @@ h1, h2, h3, h4 { color: var(--ink) !important; letter-spacing: -.02em; font-weig
 }
 /* Botão de recolher dentro da sidebar também sempre visível */
 [data-testid="stSidebarCollapseButton"], [data-testid="stSidebarCollapseButton"] button {
-  visibility: visible !important; opacity: 1 !important;
+  visibility: visible !important; opacity: 1 !important; pointer-events: auto !important;
 }
 [data-testid="stSidebarCollapseButton"] svg { fill: #FFFFFF !important; color: #FFFFFF !important; }
 
@@ -669,6 +674,8 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
 section[data-testid="stSidebar"] .stButton > button[kind="secondary"], section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] { background: rgba(255,255,255,.08) !important; border: 1px solid rgba(255,255,255,.14) !important; box-shadow: none !important; }
 [data-testid="stBaseLinkButton-secondary"], [data-testid="stBaseLinkButton-primary"] { border-radius: 10px !important; font-weight: 600 !important; }
 [data-testid="stBaseLinkButton-secondary"] { border: 1px solid var(--line) !important; background: #fff !important; }
+[data-testid="stBaseLinkButton-primary"] { background: linear-gradient(135deg, #14B8A6, #0F766E) !important; border: none !important; color: #FFFFFF !important; box-shadow: 0 4px 14px rgba(15,118,110,.28) !important; }
+[data-testid="stBaseLinkButton-primary"] p { color: #FFFFFF !important; }
 
 .stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .stTabs [data-baseweb="tab"] { height: 44px; padding: 0 16px; border-radius: 10px 10px 0 0; font-weight: 600; color: var(--ink-3); }
@@ -710,6 +717,7 @@ hr { border-color: var(--line) !important; }
 
 # ==============================================================================
 # TELA DE LOGIN (ACESSO EXCLUSIVO PARA CLIENTES + BOTÃO DE COMPRA)
+# Versão protegida: SEM cadastro público. Quem não é cliente vê o botão de compra.
 # ==============================================================================
 if "auth_user" not in st.session_state:
     st.session_state["auth_user"] = None
@@ -726,6 +734,7 @@ def _caminho_foto_sistema():
     return None
 
 def render_tela_login():
+    # CSS exclusivo da tela de login (não afeta o painel depois que o cliente entra)
     st.markdown("""
     <style>
     .stApp { background: radial-gradient(1100px 600px at 8% 0%, #D9F3EF 0%, rgba(217,243,239,0) 60%),
@@ -775,12 +784,12 @@ def render_tela_login():
     </div>
     """)
 
-    # --- 3) LOGIN OU COMPRA, EMBAIXO ---
+    # --- 3) LOGIN (SOMENTE CLIENTES) + BOTÃO DE COMPRA PARA QUEM NÃO É CLIENTE ---
     c_center = st.columns([1, 1.5, 1])[1]
     with c_center:
         md("""
         <div style="text-align:center;margin-bottom:1rem">
-          <div style="font-size:1.35rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">Acesso exclusivo para membros</div>
+          <div style="font-size:1.35rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">Acesso exclusivo para membros autorizados</div>
           <div style="font-size:.88rem;color:#64748B;margin-top:2px">Entre com sua conta ou adquira sua licença</div>
         </div>
         """)
@@ -808,7 +817,7 @@ def render_tela_login():
 
             st.divider()
 
-            # Quem não é cliente vê isto:
+            # Se alguém que não pagou receber o link, ele vê isto:
             st.markdown("<p style='text-align:center;font-size:0.88rem;color:#64748B;margin-bottom:8px'>Ainda não tem sua licença de acesso?</p>", unsafe_allow_html=True)
             st.link_button("👉 Adquira seu acesso aqui", LINK_COMPRA, use_container_width=True, type="primary")
 
@@ -856,7 +865,7 @@ def salvar_dados_usuario(dados, user):
     except Exception:
         st.toast("Não foi possível sincronizar com o servidor. Verifique sua conexão.", icon="⚠️")
 
-if "db_invest" not in st.session_state or st.session_state.get("last_uid") != user_logado.id:
+if "db_invest" not in st.session_state or st.session_state.get("db_invest") is None or st.session_state.get("last_uid") != user_logado.id:
     dados_carregados, nome_usuario = carregar_dados_usuario(user_logado)
     st.session_state["db_invest"] = dados_carregados
     st.session_state["auth_nome"] = nome_usuario
@@ -871,6 +880,69 @@ def salvar_dados(dados):
     salvar_dados_usuario(dados, user_logado)
 
 iniciais = "".join([part[0] for part in NOME_USUARIO_LOGADO.split()[:2]]).upper() or "UF"
+
+# ==============================================================================
+# BOTÃO FLUTUANTE DE REABRIR A BARRA LATERAL (reforço contra a "setinha" sumir)
+# Se a sidebar estiver recolhida e o botão nativo do Streamlit não estiver
+# visível, cria um botão "☰" fixo no canto da tela que reabre o menu.
+# ==============================================================================
+components.html("""
+<script>
+(function () {
+  var doc;
+  try { doc = window.parent.document; } catch (e) { return; }
+  if (!doc) return;
+  if (window.parent.__mfSidebarFix) return;
+  window.parent.__mfSidebarFix = true;
+
+  function nativeBtn() {
+    return doc.querySelector('[data-testid="stExpandSidebarButton"]')
+        || doc.querySelector('[data-testid="stSidebarCollapsedControl"] button')
+        || doc.querySelector('[data-testid="collapsedControl"] button');
+  }
+  function visivel(el) {
+    if (!el) return false;
+    var r = el.getBoundingClientRect();
+    var cs = window.parent.getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0';
+  }
+  function sidebarRecolhida() {
+    var sb = doc.querySelector('section[data-testid="stSidebar"]');
+    if (!sb) return true;
+    var exp = sb.getAttribute('aria-expanded');
+    if (exp === 'false') return true;
+    var r = sb.getBoundingClientRect();
+    return r.width < 40;
+  }
+  function criar() {
+    var b = doc.getElementById('mf-open-sidebar');
+    if (b) return b;
+    b = doc.createElement('button');
+    b.id = 'mf-open-sidebar';
+    b.type = 'button';
+    b.title = 'Abrir menu';
+    b.innerHTML = '&#9776;';
+    b.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483000;width:42px;height:42px;' +
+      'border-radius:12px;border:1.5px solid #14B8A6;background:#0A1628;color:#fff;font-size:20px;' +
+      'cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.28);display:none;align-items:center;justify-content:center;';
+    b.addEventListener('click', function () {
+      var n = nativeBtn();
+      if (n) { n.click(); }
+    });
+    doc.body.appendChild(b);
+    return b;
+  }
+  function ciclo() {
+    var b = criar();
+    var n = nativeBtn();
+    var precisa = sidebarRecolhida() && !visivel(n);
+    b.style.display = (precisa && n) ? 'flex' : 'none';
+  }
+  ciclo();
+  setInterval(ciclo, 600);
+})();
+</script>
+""", height=0)
 
 # ==============================================================================
 # FUNÇÕES DE CÁLCULO FINANCEIRO
@@ -1595,11 +1667,11 @@ elif menu == "Resumo & Diagnóstico":
     <body style="font-family:'Segoe UI',sans-serif;background-color:#F4F6F9;padding:24px;color:#0F172A;">
       <div style="max-width:620px;margin:auto;background:#FFFFFF;border-radius:14px;padding:28px;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
         <div style="border-bottom:2px solid #0F766E;padding-bottom:12px;margin-bottom:20px;">
-          <h2 style="color:#0F766E;margin:0;">Meu Financeiro · {NOME_USUARIO_LOGADO}</h2>
+          <h2 style="color:#0F766E;margin:0;">Meu Financeiro · {html.escape(NOME_USUARIO_LOGADO)}</h2>
           <p style="color:#64748B;font-size:14px;margin:4px 0 0;">Relatório Executivo Mensal — {nome_m_diag} de {a_diag}</p>
         </div>
 
-        <p style="font-size:15px;line-height:1.6;">Olá, <b>{NOME_USUARIO_LOGADO}</b>! Aqui está o diagnóstico completo do seu financeiro para você acompanhar de qualquer lugar:</p>
+        <p style="font-size:15px;line-height:1.6;">Olá, <b>{html.escape(NOME_USUARIO_LOGADO)}</b>! Aqui está o diagnóstico completo do seu financeiro para você acompanhar de qualquer lugar:</p>
 
         <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px;margin:18px 0;">
           <h4 style="margin:0 0 10px;color:#0F172A;">💰 Quanto Dinheiro Você Tem Hoje</h4>
@@ -1637,7 +1709,7 @@ elif menu == "Resumo & Diagnóstico":
 
     with col_btn1:
         smtp_cfg = db.get("config", {})
-        remetente_salvo = smtp_cfg.get("smtp_email", EMAIL_USUARIO_LOGADO)
+        remetente_salvo = smtp_cfg.get("smtp_email", EMAIL_USUARIO_LOGADO) or EMAIL_USUARIO_LOGADO
         senha_app_salva = smtp_cfg.get("smtp_pass", "")
 
         if st.button("Enviar e-mail automático agora", type="primary", use_container_width=True):
