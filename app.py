@@ -2749,7 +2749,7 @@ elif menu == "Devedores":
         with st.form("form_novo_devedor", clear_on_submit=True):
             c1_nome, c2_nome = st.columns(2)
             nome_escolhido = c1_nome.selectbox("👤 Escolher Pessoa Já Cadastrada:", ["-- Nenhuma (Digitar ao lado) --"] + nomes_cadastrados if nomes_cadastrados else ["Nenhuma cadastrada"])
-            nome_digitado = c2_nome.text_input("➕ OU Digite o Nome de uma Nova Pessoa:", placeholder="Ex: Magda, Eduarda").strip()
+            nome_digitado = c2_nome.text_input("➕ OU Digite o Nome de uma Nova Pessoa:", placeholder="Ex: Rafael, Julia").strip()
 
             d1, d2 = st.columns(2)
             desc_p = d1.text_input("Descrição do que foi", placeholder="Ex: Óculos, Celular, Camisa").strip()
