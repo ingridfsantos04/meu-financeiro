@@ -962,6 +962,36 @@ def somar_ou_adicionar_ativo(novo):
     db["ativos"].append(novo)
     return False
 
+def consolidar_ativos_duplicados():
+    """Junta ativos repetidos (mesmo ticker e classe) em um só, somando as quantidades
+    e recalculando o preço médio ponderado. Roda sozinho a cada carregamento."""
+    grupos, unicos, mudou = {}, [], False
+    for a in db.get("ativos", []):
+        k = (str(a.get("ticker", "")).strip().upper(), a.get("classe"))
+        if k in grupos:
+            base = grupos[k]
+            q1, q2 = float(base["qtd"]), float(a["qtd"])
+            q_tot = round(q1 + q2, 8)
+            if q_tot > 0:
+                base["pm"] = float((q1 * float(base["pm"]) + q2 * float(a["pm"])) / q_tot)
+            base["qtd"] = q_tot if (k[1] in CLASSES_ALT or abs(q_tot - round(q_tot)) > 1e-9) else int(round(q_tot))
+            base["preco_atual"] = float(a.get("preco_atual", base.get("preco_atual", base["pm"])))
+            if a.get("data_compra"):
+                base["data_compra"] = a["data_compra"]
+            if a.get("corretora") and not base.get("corretora"):
+                base["corretora"] = a["corretora"]
+            mudou = True
+        else:
+            grupos[k] = a
+            unicos.append(a)
+    if mudou:
+        db["ativos"] = unicos
+        salvar_dados(db)
+        st.toast("Ativos repetidos foram juntados em um só, com preço médio atualizado.", icon="🔁")
+    return mudou
+
+consolidar_ativos_duplicados()
+
 iniciais = "".join([part[0] for part in NOME_USUARIO_LOGADO.split()[:2]]).upper() or "UF"
 
 # ==============================================================================
@@ -1380,11 +1410,13 @@ def listar_ativos(df_view):
         cor_cl = CORES_CLASSE.get(cl, "#2563EB")
 
         extra = ""
-        if row.get("corretora"):
-            extra = f" · {html.escape(str(row['corretora']))}"
-        if row.get("data_compra"):
+        _corr = row.get("corretora")
+        if isinstance(_corr, str) and _corr.strip():
+            extra = f" · {html.escape(_corr.strip())}"
+        _dt_c = row.get("data_compra")
+        if isinstance(_dt_c, str) and _dt_c.strip():
             try:
-                extra += " · " + datetime.strptime(row["data_compra"], "%Y-%m-%d").strftime("%d/%m/%Y")
+                extra += " · " + datetime.strptime(_dt_c, "%Y-%m-%d").strftime("%d/%m/%Y")
             except Exception:
                 pass
 
