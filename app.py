@@ -76,10 +76,13 @@ supabase: Client = iniciar_supabase()
 
 if "auth_session" in st.session_state and st.session_state["auth_session"]:
     try:
-        supabase.auth.set_session(
+        _r = supabase.auth.set_session(
             st.session_state["auth_session"].access_token,
             st.session_state["auth_session"].refresh_token
         )
+        _nova = getattr(_r, "session", None)
+        if _nova is not None and getattr(_nova, "access_token", None):
+            st.session_state["auth_session"] = _nova
     except Exception:
         pass
 
@@ -172,7 +175,7 @@ def hero(titulo, sub):
     d = agora_br()
     data_txt = f"{DIAS_PT[d.weekday()]}, {d.day} de {MESES_PT[d.month-1].lower()}"
     md(f"""<div class="hero-box">
-      <div class="hero-text"><div class="hero-eyebrow">{APP_NOME}</div><div class="hero-title">{titulo}</div><div class="hero-sub">{sub}</div></div>
+      <div class="hero-text"><div class="hero-eyebrow">{APP_NOME} &nbsp;/&nbsp; Painel</div><div class="hero-title">{titulo}</div><div class="hero-sub">{sub}</div></div>
       <div class="hero-date">{data_txt}</div>
     </div>""")
 
@@ -180,8 +183,8 @@ def secao(titulo, sub=None):
     s = f"<div class='sec-sub'>{sub}</div>" if sub else ""
     md(f"<div class='sec'><div class='sec-t'>{titulo}</div>{s}</div>")
 
-def vazio(msg, icone="📭"):
-    md(f"<div class='empty'><div class='empty-i'>{icone}</div>{msg}</div>")
+def vazio(msg, icone=None):
+    md(f"<div class='empty'>{msg}</div>")
 
 def kpi(valor, label, cor="#0B1220", tamanho="1.55rem"):
     return f"<div class='kpi'><div class='kpi-l'>{label}</div><div class='kpi-n' style='color:{cor};font-size:{tamanho}'>{valor}</div></div>"
@@ -238,6 +241,10 @@ def agora_br():
     except Exception:
         pass
     return datetime.now()
+
+def hoje_br():
+    """Data de hoje no horário de Brasília (o servidor do Streamlit Cloud roda em UTC)."""
+    return agora_br().date()
 
 def chip_classe(classe):
     mapa = {
@@ -772,6 +779,90 @@ hr { border-color: var(--line) !important; }
   .stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important; gap: 10px !important; }
   .stat-n { font-size: 1.25rem !important; }
 }
+
+/* ============================================================================
+   POLIMENTO PROFISSIONAL (v2)
+   ============================================================================ */
+:root {
+  --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 14px;
+  --sh-xs: 0 1px 1px rgba(15,23,42,.04);
+  --sh-sm: 0 1px 2px rgba(15,23,42,.06);
+  --sh-md: 0 6px 20px -8px rgba(15,23,42,.18);
+}
+.block-container { max-width: 1240px !important; padding-top: 1.4rem !important; }
+html { font-size: 15px; }
+h1, h2, h3, h4 { letter-spacing: -.015em; }
+
+/* Cabeçalho da página */
+.hero-box {
+  padding: 1.15rem 1.5rem; border-radius: var(--r-xl); margin-bottom: 1.3rem; align-items: center;
+  background: linear-gradient(115deg, #0B1B30 0%, #0F2A44 62%, #115E59 170%); box-shadow: var(--sh-md);
+}
+.hero-box::before, .hero-box::after { display: none; }
+.hero-eyebrow { font-size: .66rem; letter-spacing: .12em; margin-bottom: .3rem; color: #7DD3C8; }
+.hero-title { font-size: 1.4rem; letter-spacing: -.02em; }
+.hero-sub { font-size: .86rem; margin-top: .3rem; color: #B6C4D4; max-width: 760px; }
+.hero-date { border-radius: 8px; background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); font-size: .76rem; padding: .4rem .8rem; backdrop-filter: none; }
+
+/* Seções */
+.sec { margin: 1.7rem 0 .8rem; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+.sec-t { font-size: .98rem; font-weight: 700; }
+.sec-t::before { width: 3px; height: 15px; }
+.sec-sub { margin-left: 13px; font-size: .82rem; }
+
+/* Cards de números */
+.stats { gap: 14px; }
+.stat { border-radius: var(--r-lg); padding: .95rem 1.15rem .95rem 1.3rem; box-shadow: var(--sh-sm); }
+.stat::before { width: 3px; }
+.stat:hover { transform: none; box-shadow: var(--sh-md); }
+.stat-n { font-size: 1.4rem; font-weight: 800; }
+.stat-l { font-size: .76rem; text-transform: none; letter-spacing: 0; }
+.kpi-l { font-size: .74rem; }
+.banner { border-radius: var(--r-lg); padding: 1.15rem 1.5rem; }
+.banner-v { font-size: 2rem; }
+
+/* Linhas das listas (ativos, contas, devedores...) */
+[data-testid="stVerticalBlockBorderWrapper"] { border-radius: var(--r-lg) !important; box-shadow: var(--sh-xs) !important; }
+[data-testid="stVerticalBlockBorderWrapper"]:hover { box-shadow: var(--sh-sm) !important; border-color: #CFD8E3 !important; }
+.asset-tk { font-size: 1rem; font-weight: 700; }
+.cell-l { text-transform: uppercase; letter-spacing: .04em; font-size: .66rem; font-weight: 700; color: var(--ink-4); }
+.cell-v { font-size: .95rem; font-weight: 600; }
+.cell-big { font-size: 1.05rem; font-weight: 700; }
+
+/* Etiquetas e status: formato retangular discreto */
+.chip { border-radius: 5px; padding: 1px 7px; font-size: .66rem; letter-spacing: .02em; }
+.badge-status { border-radius: 6px; padding: 2px 9px; font-size: .72rem; }
+.avatar { border-radius: 9px; width: 38px; height: 38px; }
+.person { border-radius: var(--r-lg); padding: .8rem 1.15rem; box-shadow: var(--sh-xs); background: #F8FAFC; }
+.empty { border-radius: var(--r-lg); padding: 2.2rem 1.2rem; font-size: .9rem; background: #FAFBFD; }
+
+/* Botões e campos */
+.stButton > button, .stFormSubmitButton > button, [data-testid="stBaseLinkButton-secondary"], [data-testid="stBaseLinkButton-primary"],
+[data-testid="stPopover"] button { min-height: 2.35rem; border-radius: var(--r-md) !important; font-size: .86rem; }
+.stTextInput div[data-baseweb="input"], .stNumberInput div[data-baseweb="input"], .stDateInput div[data-baseweb="input"],
+.stSelectbox div[data-baseweb="select"] > div, .stTextArea div[data-baseweb="textarea"] { border-radius: var(--r-md) !important; }
+[data-testid="stExpander"], [data-testid="stForm"] { border-radius: var(--r-lg) !important; }
+.stTabs [data-baseweb="tab"] { font-size: .9rem; }
+
+/* Menu lateral */
+section[data-testid="stSidebar"] div[role="radiogroup"] label { border-radius: var(--r-md) !important; padding: .55rem .8rem !important; }
+.brand-mark { border-radius: 10px; }
+
+/* Calendário */
+.cal-head { border-radius: 6px; font-size: .7rem; padding: 8px 4px; }
+.cal-cell, .cal-cell-empty { border-radius: 8px; }
+.cal-tag { border-radius: 4px; }
+
+/* Cotações */
+.tk, .tk-live { border-radius: var(--r-lg); }
+.tk-v { font-size: 1.2rem; }
+
+@media (max-width: 768px) {
+  html { font-size: 14px; }
+  .hero-title { font-size: 1.2rem; }
+  .hero-box { padding: 1rem 1.1rem; }
+  .banner-v { font-size: 1.6rem; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -794,6 +885,8 @@ def _caminho_foto_sistema():
     return None
 
 def render_tela_login():
+    if st.session_state.pop("_apagar_cookie", False):
+        apagar_cookie_sessao()
     # CSS exclusivo da tela de login (não afeta o painel depois que o cliente entra)
     st.markdown("""
     <style>
@@ -856,7 +949,7 @@ def render_tela_login():
         """)
 
         with st.container(border=True):
-            st.markdown("#### 🔑 Acessar minha conta")
+            st.markdown("#### Acessar minha conta")
             with st.form("form_login"):
                 email_login = st.text_input("E-mail cadastrado", placeholder="seu.email@exemplo.com").strip().lower()
                 senha_login = st.text_input("Sua senha", type="password", placeholder="Digite sua senha")
@@ -871,6 +964,7 @@ def render_tela_login():
                             if res.user and res.session:
                                 st.session_state["auth_user"] = res.user
                                 st.session_state["auth_session"] = res.session
+                                st.session_state["_saiu"] = False
                                 supabase.auth.set_session(res.session.access_token, res.session.refresh_token)
                                 st.rerun()
                         except Exception:
@@ -880,9 +974,46 @@ def render_tela_login():
 
             # Se alguém que não pagou receber o link, ele vê isto:
             st.markdown("<p style='text-align:center;font-size:0.88rem;color:#64748B;margin-bottom:8px'>Ainda não tem sua licença de acesso?</p>", unsafe_allow_html=True)
-            st.link_button("👉 Adquira seu acesso aqui", LINK_COMPRA, use_container_width=True, type="primary")
+            st.link_button("Adquirir meu acesso", LINK_COMPRA, use_container_width=True, type="primary")
 
-        st.markdown("<p style='text-align:center;font-size:0.75rem;color:#94A3B8;margin-top:1.2rem'>🔒 Ambiente seguro e blindado contra acessos não autorizados.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center;font-size:0.75rem;color:#94A3B8;margin-top:1.2rem'>Ambiente seguro e protegido contra acessos não autorizados.</p>", unsafe_allow_html=True)
+
+# --- Sessão persistente: o refresh token fica em um cookie do navegador, assim o
+# --- F5 / recarregar a página não derruba o login. (Requer Streamlit >= 1.37)
+COOKIE_SESSAO = "mf_rt"
+
+def _ler_cookie_sessao():
+    try:
+        return st.context.cookies.get(COOKIE_SESSAO)
+    except Exception:
+        return None
+
+def gravar_cookie_sessao(refresh_token):
+    if not refresh_token:
+        return
+    tok = urllib.parse.quote(str(refresh_token), safe="")
+    components.html(
+        "<script>(function(){try{var p=window.parent;"
+        "var sec=(p.location.protocol==='https:')?'; Secure':'';"
+        f"p.document.cookie='{COOKIE_SESSAO}={tok}; path=/; max-age=2592000; SameSite=Lax'+sec;"
+        "}catch(e){}})();</script>", height=0)
+
+def apagar_cookie_sessao():
+    components.html(
+        "<script>(function(){try{var p=window.parent;"
+        f"p.document.cookie='{COOKIE_SESSAO}=; path=/; max-age=0; SameSite=Lax';"
+        "}catch(e){}})();</script>", height=0)
+
+if st.session_state["auth_user"] is None and not st.session_state.get("_saiu"):
+    _rt = _ler_cookie_sessao()
+    if _rt:
+        try:
+            _res = supabase.auth.refresh_session(urllib.parse.unquote(_rt))
+            if _res and _res.user and _res.session:
+                st.session_state["auth_user"] = _res.user
+                st.session_state["auth_session"] = _res.session
+        except Exception:
+            pass
 
 if st.session_state["auth_user"] is None:
     render_tela_login()
@@ -992,6 +1123,37 @@ def consolidar_ativos_duplicados():
 
 consolidar_ativos_duplicados()
 
+# Mantém o cookie de sessão sempre com o token mais recente
+if st.session_state.get("auth_session"):
+    gravar_cookie_sessao(getattr(st.session_state["auth_session"], "refresh_token", None))
+
+# ------------------------------------------------------------------------------
+# ACOMPANHAR A DATA: se o dia/mês virar com o site aberto, os filtros acompanham
+# ------------------------------------------------------------------------------
+CHAVES_FILTRO_MES = [
+    "vg_mes", "vg_ano", "diag_mes", "diag_ano", "sel_m_contas", "sel_a_contas",
+    "m_prov", "a_prov", "deb_mes", "deb_ano", "sel_mfat", "sel_afat",
+]
+_hoje_ref = hoje_br()
+_ref_mes_anterior = st.session_state.get("_ref_mes")
+if _ref_mes_anterior != (_hoje_ref.year, _hoje_ref.month):
+    st.session_state["_ref_mes"] = (_hoje_ref.year, _hoje_ref.month)
+    if _ref_mes_anterior is not None:  # o mês virou com a sessão aberta
+        for _k in CHAVES_FILTRO_MES:
+            st.session_state.pop(_k, None)
+        st.session_state["fatura_mes_num"] = _hoje_ref.month
+        st.session_state["fatura_ano_num"] = _hoje_ref.year
+        st.toast("Novo mês: os painéis foram atualizados para " + MESES_PT[_hoje_ref.month - 1] + ".", icon="📅")
+st.session_state["_ref_dia"] = _hoje_ref
+
+def _vigia_data():
+    # roda a cada 60s: se virou o dia (ou o mês), recarrega o painel sozinho
+    if st.session_state.get("_ref_dia") != hoje_br():
+        st.rerun()
+
+if hasattr(st, "fragment"):
+    st.fragment(run_every=60)(_vigia_data)()
+
 iniciais = "".join([part[0] for part in NOME_USUARIO_LOGADO.split()[:2]]).upper() or "UF"
 
 # ==============================================================================
@@ -1070,7 +1232,7 @@ def inicio_fatura_compra(c):
     try:
         dt_compra = datetime.strptime(c["data_compra"], "%Y-%m-%d").date()
     except Exception:
-        dt_compra = date.today()
+        dt_compra = hoje_br()
     m = dt_compra.month + (1 if dt_compra.day >= 15 else 0)
     a = dt_compra.year + (1 if m > 12 else 0)
     m = 1 if m > 12 else m
@@ -1091,12 +1253,7 @@ def calcular_fatura_cartao_mes(chave_mes):
     return total
 
 def recebido_devedores_no_mes(chave_mes):
-    total = 0.0
-    for d in db.get("devedores", []):
-        for pg in d.get("pagamentos", []):
-            if str(pg.get("data", "")).startswith(chave_mes):
-                total += float(pg.get("valor", 0.0))
-    return total
+    return sum(r["valor"] for r in recebimentos_devedores_mes(chave_mes))
 
 def obter_caixinha_fluxo():
     caixinhas = db.get("caixinhas", [])
@@ -1127,59 +1284,101 @@ def registrar_mov_caixinha(caixinha_id, tipo, valor, data_mov, obs=""):
         "obs": obs
     })
 
+def _add_meses(d, n, dia=None):
+    """Soma n meses a uma data, respeitando o último dia de cada mês."""
+    m0 = d.month - 1 + n
+    ano, mes = d.year + m0 // 12, m0 % 12 + 1
+    dia = dia or d.day
+    return date(ano, mes, min(int(dia), calendar.monthrange(ano, mes)[1]))
+
+def _parcela_divida(dev):
+    parc_tot = max(int(dev.get("parcelas_total", 1)), 1)
+    v_tot = float(dev.get("valor_total", 0.0))
+    v = float(dev.get("valor_parcela") or 0.0)
+    return v if v > 0 else (v_tot / parc_tot)
+
+def vencimentos_divida(dev):
+    """Lista com a data de vencimento de cada parcela da dívida."""
+    parc_tot = max(int(dev.get("parcelas_total", 1)), 1)
+    base_str = dev.get("primeiro_vencimento") or dev.get("data_vencimento") or dev.get("data_emprestimo") or dev.get("data")
+    try:
+        base = datetime.strptime(str(base_str), "%Y-%m-%d").date()
+    except Exception:
+        base = hoje_br()
+    dia = int(dev.get("dia_vencimento") or base.day)
+    return [_add_meses(base, i, dia) for i in range(parc_tot)]
+
 def calcular_atraso_real_divida(dev):
+    """O atraso é calculado pela DATA DE VENCIMENTO de cada parcela:
+    parcela vencida (data < hoje) e ainda não coberta pelos recebimentos = em atraso."""
     v_tot = float(dev.get("valor_total", 0.0))
     parc_tot = max(int(dev.get("parcelas_total", 1)), 1)
-    v_parc = float(dev.get("valor_parcela", v_tot / parc_tot if parc_tot else 0.0))
+    v_parc = _parcela_divida(dev)
     tot_pago = float(dev.get("total_pago_reais", 0.0))
     falta_tot = max(0.0, v_tot - tot_pago)
+    hoje_atual = hoje_br()
 
-    hoje_atual = date.today()
-    dt_inicio_str = dev.get("data_emprestimo") or dev.get("data", hoje_atual.strftime("%Y-%m-%d"))
-    try:
-        dt_ini = datetime.strptime(dt_inicio_str, "%Y-%m-%d").date()
-    except Exception:
-        dt_ini = hoje_atual
+    venc = vencimentos_divida(dev)
+    n_vencidas = sum(1 for d in venc if d < hoje_atual)
+    esperado = min(v_tot, n_vencidas * v_parc)
+    val_atraso = max(0.0, min(falta_tot, esperado - tot_pago))
 
-    meses_decorridos = (hoje_atual.year - dt_ini.year) * 12 + (hoje_atual.month - dt_ini.month)
-    if hoje_atual.day >= dt_ini.day:
-        meses_decorridos += 1
+    parcelas_cobertas = int((tot_pago + 0.05) // v_parc) if v_parc > 0 else 0
+    n_atrasadas = max(0, n_vencidas - parcelas_cobertas) if val_atraso > 0 else 0
+    idx_prox = min(parcelas_cobertas, parc_tot - 1)
+    proximo_venc = venc[idx_prox] if venc else None
 
-    parc_esperadas = min(parc_tot, max(0, meses_decorridos))
-    val_esperado = parc_esperadas * v_parc
-    val_atraso = max(0.0, min(falta_tot, val_esperado - tot_pago))
+    is_quitado = falta_tot <= 0.05
 
-    # Valor da parcela do mês (é isso que deve aparecer na etiqueta "Em atraso",
-    # e não o valor total acumulado). Nunca passa do que ainda falta pagar.
-    parcela_mes = min(v_parc, falta_tot)
-
-    is_quitado = falta_tot <= 0.05 or dev.get("status") == "quitado"
-
+    dias_atraso = 0
     if is_quitado:
         status_d = "quitado"
         badge = "<span class='badge-status status-alta'>Quitado</span>"
-        msg_detalhe = "Dívida totalmente paga!"
+        msg_detalhe = "Dívida totalmente paga"
     elif val_atraso > 0:
         status_d = "atrasado"
-        badge = f"<span class='badge-status status-atraso'>Em atraso: {fmt_moeda(parcela_mes)}</span>"
-        n_parc_atr = int(round(val_atraso / v_parc)) if v_parc > 0 else 1
-        msg_detalhe = f"{n_parc_atr} parcela(s) vencida(s)"
+        dias_atraso = max(0, (hoje_atual - proximo_venc).days) if proximo_venc else 0
+        badge = f"<span class='badge-status status-atraso'>Em atraso · {fmt_moeda(val_atraso)}</span>"
+        msg_detalhe = f"{n_atrasadas} parcela(s) vencida(s) · venceu em {proximo_venc.strftime('%d/%m/%Y')} ({dias_atraso} dia(s))"
     else:
         status_d = "em_dia"
         badge = "<span class='badge-status status-alta'>Em dia</span>"
-        msg_detalhe = "Parcelas em dia"
+        msg_detalhe = f"Próximo vencimento: {proximo_venc.strftime('%d/%m/%Y')}" if proximo_venc else "Parcelas em dia"
 
     return {
         "falta_total": falta_tot,
         "valor_atraso": val_atraso,
-        "parcela_mes": parcela_mes,
         "v_parc": v_parc,
         "total_pago": tot_pago,
         "total_contratado": v_tot,
         "status": status_d,
         "badge": badge,
-        "msg_detalhe": msg_detalhe
+        "msg_detalhe": msg_detalhe,
+        "proximo_venc": proximo_venc,
+        "dias_atraso": dias_atraso,
+        "n_atrasadas": n_atrasadas,
+        "parcelas_cobertas": parcelas_cobertas,
     }
+
+def recebimentos_devedores_mes(chave_mes):
+    """Cada recebimento (data + valor) registrado no mês, com o nome de quem pagou."""
+    lista = []
+    for d in db.get("devedores", []):
+        for pg in d.get("pagamentos", []):
+            if str(pg.get("data", "")).startswith(chave_mes):
+                lista.append({"data": str(pg["data"]), "valor": float(pg.get("valor", 0.0)),
+                              "nome": d.get("nome", ""), "descricao": d.get("descricao", "")})
+    return sorted(lista, key=lambda x: x["data"])
+
+def previsto_devedores_no_mes(chave_mes):
+    """Soma das parcelas que vencem no mês (valor da parcela de cada devedor)."""
+    total = 0.0
+    for d in db.get("devedores", []):
+        v = _parcela_divida(d)
+        for dt in vencimentos_divida(d):
+            if dt.strftime("%Y-%m") == chave_mes:
+                total += v
+    return total
 
 def sincronizar_dividendos_carteira(mes, ano):
     adicionados = 0
@@ -1240,12 +1439,26 @@ with st.sidebar:
     <div class="side-label" style="margin-top:0">Menu</div>
     """)
 
+    _SLUGS = {m: m.lower().replace(" & ", "-").replace(" ", "-").replace("ã", "a").replace("ç", "c").replace("é", "e").replace("í", "i").replace("ó", "o") for m in MENU_ITENS}
+    try:
+        _p_atual = st.query_params.get("p")
+    except Exception:
+        _p_atual = None
+    _idx_menu = next((i for i, m in enumerate(MENU_ITENS) if _SLUGS[m] == _p_atual), 0)
+
     menu = st.radio(
         "Navegação",
         MENU_ITENS,
+        index=_idx_menu,
+        key="menu_nav",
         format_func=lambda x: x,
         label_visibility="collapsed"
     )
+    try:
+        if st.query_params.get("p") != _SLUGS[menu]:
+            st.query_params["p"] = _SLUGS[menu]
+    except Exception:
+        pass
 
     md("<div class='side-label'>Mercado</div>")
     auto_tempo_real = st.toggle("Tempo real (atualiza a cada 30s)", value=True, help="Atualiza dólar, Bitcoin, ações e FIIs automaticamente.")
@@ -1269,7 +1482,7 @@ with st.sidebar:
     # --------------------------------------------------------------------------
     # ALTERAR MINHA SENHA (o cliente troca a própria senha pelo painel)
     # --------------------------------------------------------------------------
-    with st.expander("🔒 Alterar minha senha"):
+    with st.expander("Alterar minha senha"):
         with st.form("form_alt_senha", clear_on_submit=True):
             nova_senha = st.text_input("Nova senha (mínimo 6 caracteres)", type="password", placeholder="Digite a nova senha")
             conf_senha = st.text_input("Confirme a nova senha", type="password", placeholder="Repita a nova senha")
@@ -1300,6 +1513,8 @@ with st.sidebar:
         st.session_state["auth_user"] = None
         st.session_state["auth_session"] = None
         st.session_state["db_invest"] = None
+        st.session_state["_saiu"] = True
+        st.session_state["_apagar_cookie"] = True
         st.rerun()
 
 if auto_tempo_real:
@@ -1448,7 +1663,7 @@ def listar_ativos(df_view):
             with c_act:
                 col_vend, col_edit = st.columns(2)
                 with col_vend:
-                    with st.popover("💸", use_container_width=True, help="Vender"):
+                    with st.popover(":material/sell:", use_container_width=True, help="Vender"):
                         st.markdown(f"**Vender {row['ticker']}**")
                         if frac:
                             casas = 2 if cl == "Dólar" else 8
@@ -1459,7 +1674,7 @@ def listar_ativos(df_view):
                         else:
                             qtd_venda = st.number_input("Cotas vendidas", min_value=1, max_value=int(row["qtd"]), value=int(row["qtd"]), step=1, key=f"v_qtd_{row['id']}")
                         p_venda = st.number_input("Valor da venda por unidade (R$)", min_value=0.0001, value=float(row["preco_atual"]), format="%.4f" if cl == "Dólar" else "%.2f", key=f"v_p_{row['id']}")
-                        dt_venda = st.date_input("Data da venda", value=date.today(), format="DD/MM/YYYY", key=f"v_dt_{row['id']}")
+                        dt_venda = st.date_input("Data da venda", value=hoje_br(), format="DD/MM/YYYY", key=f"v_dt_{row['id']}")
 
                         if st.button("Confirmar Venda", key=f"btn_v_{row['id']}", type="primary", use_container_width=True):
                             db.setdefault("vendas", []).append({
@@ -1479,7 +1694,7 @@ def listar_ativos(df_view):
                             st.rerun()
 
                 with col_edit:
-                    with st.popover("⚙️", use_container_width=True, help="Editar / Excluir"):
+                    with st.popover(":material/settings:", use_container_width=True, help="Editar / Excluir"):
                         n_atual = st.number_input("Cotação Atual (R$)", value=float(row["preco_atual"]), format="%.4f" if cl == "Dólar" else "%.2f", key=f"cot_{row['id']}")
                         n_pm = st.number_input("Preço Médio / Pago (R$)", value=float(row["pm"]), format="%.4f" if cl == "Dólar" else "%.2f", key=f"pm_{row['id']}")
                         if frac:
@@ -1506,7 +1721,7 @@ def listar_ativos(df_view):
 if menu == "Visão Geral":
     hero(f"Visão Geral · {NOME_USUARIO_LOGADO}", "Painel consolidado e interativo: clique em “Ver detalhes” em cada card para ver exatamente o que compõe cada número.")
 
-    hoje = date.today()
+    hoje = hoje_br()
 
     c_m1, c_m2 = st.columns([2.5, 1])
     with c_m1:
@@ -1581,6 +1796,11 @@ if menu == "Visão Geral":
                 st.caption("Extrato das entradas:")
                 for te in trans_entradas_mes:
                     st.text(f"• {te['data'][8:10]}/{te['data'][5:7]}: {te['descricao']} (+{fmt_moeda(te['valor'])})")
+                _rec_dev = recebimentos_devedores_mes(chave_mes_vg)
+                if _rec_dev:
+                    st.caption("Recebimentos de devedores:")
+                    for rd in _rec_dev:
+                        st.text(f"• {rd['data'][8:10]}/{rd['data'][5:7]}: {rd['nome']} - {rd['descricao']} (+{fmt_moeda(rd['valor'])})")
 
     with col_c2:
         with st.container(border=True):
@@ -1735,25 +1955,19 @@ if menu == "Visão Geral":
     else:
         vazio("Cadastre ativos na aba “Minha Carteira” para ver o desempenho dos seus investimentos.", "📈")
 
-    secao("Devedores", "Valores que terceiros ainda te devem.")
+    secao("Devedores", "Valores que terceiros ainda te devem. Atraso calculado pela data de vencimento de cada parcela.")
     devedores = db.get("devedores", [])
-    total_geral_receber = sum(calcular_atraso_real_divida(d)["falta_total"] for d in devedores)
-    # Em atraso = soma das parcelas do mês das dívidas que estão atrasadas (e não o total acumulado)
-    total_atraso_devedores = sum(
-        calcular_atraso_real_divida(d)["parcela_mes"]
-        for d in devedores
-        if calcular_atraso_real_divida(d)["status"] == "atrasado"
-    )
+    _infos_dev = [calcular_atraso_real_divida(d) for d in devedores]
+    total_geral_receber = sum(i["falta_total"] for i in _infos_dev)
+    total_atraso_devedores = sum(i["valor_atraso"] for i in _infos_dev)
+    previsto_dev_mes = previsto_devedores_no_mes(chave_mes_vg)
 
     md(f"""
-    <div class="card-pro">
-      <div style="font-size:1.9rem;font-weight:800;color:#0B1220;letter-spacing:-.03em">{fmt_moeda(total_geral_receber)}</div>
-      <div style="font-size:.85rem;color:#64748B;margin-bottom:12px">Total geral que amigos/terceiros ainda te devem</div>
-      <hr style="border:none;border-top:1px solid #E5E9F0;margin:10px 0">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.92rem;color:#334155;flex-wrap:wrap;gap:8px">
-        <span>Em atraso: <b style="color:#B91C1C">{fmt_moeda(total_atraso_devedores)}</b></span>
-        <span>Pessoas: <b>{len(set(d['nome'] for d in devedores))}</b></span>
-      </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-n" style="color:#0B1220">{fmt_moeda(total_geral_receber)}</div><div class="stat-l">Total a receber ({len(set(d['nome'].strip().title() for d in devedores))} pessoa(s))</div></div>
+      <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(previsto_dev_mes)}</div><div class="stat-l">Parcelas que vencem em {nome_mes_vg}</div></div>
+      <div class="stat"><div class="stat-n" style="color:#15803D">{fmt_moeda(recebido_devedores_mes)}</div><div class="stat-l">Recebido em {nome_mes_vg}</div></div>
+      <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_atraso_devedores)}</div><div class="stat-l">Em atraso</div></div>
     </div>
     """)
 
@@ -1763,7 +1977,7 @@ if menu == "Visão Geral":
 elif menu == "Resumo & Diagnóstico":
     hero("Resumo & Diagnóstico Financeiro", "Tenha a visão exata do seu dinheiro, do que pode gastar, e dispare o relatório direto para seu e-mail.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
     m_diag = c1.selectbox("Mês do Diagnóstico", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="diag_mes")
     a_diag = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="diag_ano")
@@ -1810,12 +2024,12 @@ elif menu == "Resumo & Diagnóstico":
         md(f"<div class='tip'>{d}</div>")
 
 # ==============================================================================
-# TELA: CONTAS FIXAS & CALENDÁRIO
+# TELA: CONTAS FIXAS
 # ==============================================================================
 elif menu == "Contas Fixas":
-    hero("Contas Fixas & Calendário", "Gerencie suas despesas fixas. O cartão de crédito é sincronizado automaticamente no dia 22 de cada mês!")
+    hero("Contas Fixas", "Cadastre, edite e acompanhe os vencimentos do mês. A fatura do cartão entra automaticamente no dia 22.")
 
-    hoje = date.today()
+    hoje = hoje_br()
 
     c_m1, c_m2 = st.columns([2.5, 1])
     with c_m1:
@@ -1826,7 +2040,7 @@ elif menu == "Contas Fixas":
     chave_mes_contas = f"{ano_contas:04d}-{mes_contas_idx:02d}"
     nome_mes_contas = MESES_PT[mes_contas_idx - 1]
 
-    with st.expander("➕ Cadastrar nova conta fixa", expanded=False):
+    with st.expander("Cadastrar nova conta fixa", expanded=False):
         with st.form("form_nova_conta_fixa", clear_on_submit=True):
             f_col1, f_col2, f_col3 = st.columns(3)
             nome_cf = f_col1.text_input("Nome da Conta", placeholder="Ex: Aluguel, Luz, Internet, Netflix, Academia").strip()
@@ -1885,7 +2099,7 @@ elif menu == "Contas Fixas":
     """)
 
     # CALENDÁRIO VISUAL
-    secao(f"Calendário de contas — {nome_mes_contas}/{ano_contas}")
+    secao(f"Vencimentos de {nome_mes_contas}/{ano_contas}")
 
     cal_obj = calendar.Calendar(firstweekday=0)
     semanas = cal_obj.monthdayscalendar(ano_contas, mes_contas_idx)
@@ -1942,7 +2156,7 @@ elif menu == "Contas Fixas":
     md(grid_html)
 
     # LISTAGEM
-    secao(f"Lista detalhada de obrigações — {nome_mes_contas}/{ano_contas}")
+    secao(f"Contas de {nome_mes_contas}/{ano_contas}")
 
     if fatura_cartao_dinamica > 0:
         dt_venc_c = date(ano_contas, mes_contas_idx, 22)
@@ -1957,13 +2171,13 @@ elif menu == "Contas Fixas":
 
             with c_ac:
                 if cartao_pago_neste_mes:
-                    if st.button("↩️ Reabrir fatura", key="reab_fat_card"):
+                    if st.button("Reabrir fatura", key="reab_fat_card"):
                         db["faturas_pagas"] = [x for x in db["faturas_pagas"] if x != chave_mes_contas]
                         salvar_dados(db)
                         st.toast("Fatura reaberta!")
                         st.rerun()
                 else:
-                    if st.button("✅ Marcar fatura paga", key="pag_fat_card", type="primary"):
+                    if st.button("Marcar fatura como paga", key="pag_fat_card", type="primary"):
                         db.setdefault("faturas_pagas", []).append(chave_mes_contas)
                         salvar_dados(db)
                         st.toast("Fatura marcada como Paga!", icon="✅")
@@ -1985,7 +2199,7 @@ elif menu == "Contas Fixas":
             badge_st = "<span class='badge-status status-neutro'>A vencer</span>"
 
         with st.container(border=True):
-            col_dia, col_info, col_val, col_acao, col_del = st.columns([1.1, 2.3, 1.3, 1.4, 0.4], vertical_alignment="center")
+            col_dia, col_info, col_val, col_acao, col_edit, col_del = st.columns([1.0, 2.2, 1.3, 1.4, 0.45, 0.45], vertical_alignment="center")
             with col_dia:
                 md(f"""<div><div class='cell-big'>Dia {c['dia_vencimento']}</div>
                 <div class='cell-l'>{dt_venc.strftime('%d/%m/%Y')}</div></div>""")
@@ -1996,30 +2210,60 @@ elif menu == "Contas Fixas":
 
             with col_val:
                 cor_v = "#15803D" if pago else ("#B91C1C" if atrasada else "#0B1220")
-                md(f"""<div><div style='font-size:1.15rem;font-weight:900;color:{cor_v};font-variant-numeric:tabular-nums'>{fmt_moeda(c['valor'])}</div>
+                md(f"""<div><div style='font-size:1.1rem;font-weight:800;color:{cor_v};font-variant-numeric:tabular-nums'>{fmt_moeda(c['valor'])}</div>
                 <div>{badge_st}</div></div>""")
 
             with col_acao:
                 if pago:
-                    if st.button("↩️ Reabrir", key=f"reab_{c['id']}", use_container_width=True):
+                    if st.button("Reabrir", key=f"reab_{c['id']}", use_container_width=True):
                         c["status"] = "pendente"
                         c["data_pagamento"] = None
                         salvar_dados(db)
-                        st.toast(f"{c['nome']} reaberta!")
+                        st.toast(f"{c['nome']} reaberta.")
                         st.rerun()
                 else:
-                    if st.button("✅ Marcar pago", key=f"pag_{c['id']}", type="primary", use_container_width=True):
+                    if st.button("Marcar como paga", key=f"pag_{c['id']}", type="primary", use_container_width=True):
                         c["status"] = "pago"
                         c["data_pagamento"] = hoje.strftime("%Y-%m-%d")
                         salvar_dados(db)
-                        st.toast(f"{c['nome']} marcada como Paga!", icon="✅")
+                        st.toast(f"{c['nome']} marcada como paga.", icon="✅")
+                        st.rerun()
+
+            with col_edit:
+                with st.popover(":material/edit:", use_container_width=True, help="Editar conta"):
+                    st.markdown("**Editar conta fixa**")
+                    e_nome = st.text_input("Nome da conta", value=c["nome"], key=f"cf_n_{c['id']}")
+                    _idx_cat_cf = LISTA_CATEGORIAS_CONTAS.index(c["categoria"]) if c.get("categoria") in LISTA_CATEGORIAS_CONTAS else 0
+                    e_cat = st.selectbox("Categoria", LISTA_CATEGORIAS_CONTAS, index=_idx_cat_cf, key=f"cf_c_{c['id']}")
+                    e_val = st.number_input("Valor (R$)", min_value=0.01, value=float(c["valor"]), step=10.0, key=f"cf_v_{c['id']}")
+                    e_dia = st.number_input("Dia do vencimento", min_value=1, max_value=31, value=int(c["dia_vencimento"]), step=1, key=f"cf_d_{c['id']}")
+                    e_prox = st.checkbox("Aplicar também aos meses seguintes", value=True, key=f"cf_p_{c['id']}",
+                                         help="Atualiza as contas com o mesmo nome dos próximos meses.")
+                    if st.button("Salvar alterações", key=f"cf_s_{c['id']}", type="primary", use_container_width=True):
+                        nome_antigo, mes_ref = c["nome"], c["mes_ano"]
+                        novo_nome = e_nome.strip().title() or nome_antigo
+                        for x in db["contas_fixas"]:
+                            alvo = x["id"] == c["id"] or (e_prox and x["nome"] == nome_antigo and x["mes_ano"] > mes_ref)
+                            if alvo:
+                                a_x, m_x = int(x["mes_ano"][:4]), int(x["mes_ano"][5:7])
+                                x["nome"] = novo_nome
+                                x["categoria"] = e_cat
+                                x["valor"] = float(e_val)
+                                x["dia_vencimento"] = min(int(e_dia), calendar.monthrange(a_x, m_x)[1])
+                        salvar_dados(db)
+                        st.toast("Conta atualizada.", icon="✅")
                         st.rerun()
 
             with col_del:
-                if st.button("✕", key=f"del_cfix_{c['id']}", help="Excluir conta"):
-                    db["contas_fixas"] = [x for x in db["contas_fixas"] if x["id"] != c["id"]]
-                    salvar_dados(db)
-                    st.rerun()
+                with st.popover(":material/delete:", use_container_width=True, help="Excluir conta"):
+                    st.markdown("**Excluir esta conta?**")
+                    ex_prox = st.checkbox("Excluir também dos meses seguintes", value=False, key=f"cf_xp_{c['id']}")
+                    if st.button("Sim, excluir", key=f"del_cfix_{c['id']}", type="primary", use_container_width=True):
+                        nome_x, mes_x = c["nome"], c["mes_ano"]
+                        db["contas_fixas"] = [x for x in db["contas_fixas"]
+                                              if not (x["id"] == c["id"] or (ex_prox and x["nome"] == nome_x and x["mes_ano"] > mes_x))]
+                        salvar_dados(db)
+                        st.rerun()
 
 # ==============================================================================
 # TELA: MINHA CARTEIRA
@@ -2028,17 +2272,17 @@ elif menu == "Minha Carteira":
     hero("Minha Carteira", "Ações, FIIs, Cripto, Dólar e Caixinhas — com cotações em tempo real e Radar de Aportes da Bolsa.")
 
     aba_invest, aba_radar, aba_alt, aba_caixinhas, aba_vendas = st.tabs([
-        "📈 Ações, FIIs e Renda Fixa",
-        "🎯 Radar da Bolsa",
-        "₿ Cripto & Dólar",
-        "📦 Caixinhas",
-        "💸 Histórico de Vendas"
+        "Ações, FIIs e Renda Fixa",
+        "Radar da Bolsa",
+        "Cripto & Dólar",
+        "Caixinhas",
+        "Histórico de Vendas"
     ])
 
     with aba_invest:
         df_t1 = df_ativos[~df_ativos["classe"].isin(CLASSES_ALT)]
 
-        with st.expander("➕ Adicionar ação, FII ou renda fixa", expanded=df_t1.empty):
+        with st.expander("Adicionar ação, FII ou renda fixa", expanded=df_t1.empty):
             with st.form("form_novo_ativo", clear_on_submit=True):
                 f1, f2, f3 = st.columns(3)
                 ticker_in = f1.text_input("Código do Ativo (Ticker)", placeholder="Ex: PETR4, MXRF11, HGLG11").strip().upper()
@@ -2127,7 +2371,7 @@ elif menu == "Minha Carteira":
         st.divider()
         secao("Oportunidades do mercado aberto", "Ativos monitorados pelo mercado com preços atraentes ou altos pagamentos de dividendos.")
 
-        aba_m1, aba_m2, aba_m3, aba_m4 = st.tabs(["🏢 Fundos Imobiliários", "📈 Ações da B3", "💵 Dólar & Exterior", "₿ Criptoativos"])
+        aba_m1, aba_m2, aba_m3, aba_m4 = st.tabs(["Fundos Imobiliários", "Ações da B3", "Dólar & Exterior", "Criptoativos"])
 
         fii_mercado = [
             {"ticker": "MXRF11", "nome": "Maxi Renda FII", "classe": "FIIs", "preco_ref": 10.15, "motivo": "Maior número de cotistas da B3. Dividendos mensais consistentes (Yield ~11.5% a.a.).", "destaque": "💎 Queridinho dos Dividendos"},
@@ -2174,7 +2418,7 @@ elif menu == "Minha Carteira":
                         md(f"<div><span class='cell-l'>COTAÇÃO ESTIMADA</span><br><b style='font-size:1.15rem;color:#2563EB;font-variant-numeric:tabular-nums'>{fmt_moeda(preco_exibir, casas_p)}</b></div>")
 
                     with c_r3:
-                        with st.popover("➕ Adicionar", use_container_width=True):
+                        with st.popover("Adicionar", use_container_width=True):
                             st.markdown(f"**Registrar {op['ticker']}**")
                             q_add = st.number_input("Quantidade comprada", min_value=0.0001, value=10.0 if op["classe"] in ("Ações", "FIIs") else 1.0, key=f"q_rd_{op['ticker']}")
                             p_add = st.number_input("Preço pago (R$)", min_value=0.01, value=float(preco_exibir), key=f"p_rd_{op['ticker']}")
@@ -2182,7 +2426,7 @@ elif menu == "Minha Carteira":
                                 somar_ou_adicionar_ativo({
                                     "id": novo_id(), "ticker": op["ticker"], "nome": op["nome"], "classe": op["classe"],
                                     "qtd": float(q_add), "pm": float(p_add), "preco_atual": float(preco_exibir),
-                                    "data_compra": date.today().strftime("%Y-%m-%d")
+                                    "data_compra": hoje_br().strftime("%Y-%m-%d")
                                 })
                                 salvar_dados(db)
                                 st.toast(f"{op['ticker']} adicionado à sua carteira com sucesso!", icon="✅")
@@ -2236,7 +2480,7 @@ elif menu == "Minha Carteira":
             </div>
             """)
 
-        with st.expander("➕ Registrar compra de criptomoeda (Bitcoin, Solana...)", expanded=df_alt.empty):
+        with st.expander("Registrar compra de criptomoeda (Bitcoin, Solana...)", expanded=df_alt.empty):
             with st.form("form_nova_cripto", clear_on_submit=True):
                 k1, k2, k3 = st.columns(3)
                 moeda_sel = k1.selectbox("Criptomoeda", ["BTC", "SOL", "XRP", "LTC", "DOGE", "USDT", "USDC", "ADA", "BNB", "Outra"])
@@ -2246,7 +2490,7 @@ elif menu == "Minha Carteira":
                 k4, k5, k6 = st.columns(3)
                 total_pago_cripto = k4.number_input("Total pago na compra (R$)", min_value=0.0, value=500.0, step=50.0)
                 preco_un_cripto = k5.number_input("OU preço por unidade (R$)", min_value=0.0, value=0.0, step=1000.0)
-                data_cripto = k6.date_input("Data da compra", value=date.today(), format="DD/MM/YYYY", key="dt_cripto")
+                data_cripto = k6.date_input("Data da compra", value=hoje_br(), format="DD/MM/YYYY", key="dt_cripto")
 
                 corretora_cripto = st.text_input("Corretora / Exchange", placeholder="Ex: Binance, Mercado Bitcoin, Nomad").strip()
 
@@ -2273,7 +2517,7 @@ elif menu == "Minha Carteira":
 
         cot_inicial = cotacao_dolar()
         cot_default = float(cot_inicial["preco"]) if cot_inicial else 5.00
-        with st.expander("➕ Registrar compra de dólar (Nomad)", expanded=False):
+        with st.expander("Registrar compra de dólar (Nomad)", expanded=False):
             with st.form("form_novo_dolar", clear_on_submit=True):
                 u1, u2, u3 = st.columns(3)
                 usd_comprado = u1.number_input("Quantos dólares comprei (US$)", min_value=0.01, value=100.00, step=10.0)
@@ -2281,7 +2525,7 @@ elif menu == "Minha Carteira":
                 taxas_usd = u3.number_input("Taxas / IOF pagos (R$)", min_value=0.0, value=0.0, step=1.0)
 
                 u4, u5 = st.columns(2)
-                data_usd = u4.date_input("Data da compra", value=date.today(), format="DD/MM/YYYY", key="dt_usd")
+                data_usd = u4.date_input("Data da compra", value=hoje_br(), format="DD/MM/YYYY", key="dt_usd")
                 corretora_usd = u5.text_input("Onde comprou", value="Nomad").strip()
 
                 if st.form_submit_button("Salvar compra de dólar", use_container_width=True, type="primary"):
@@ -2304,7 +2548,7 @@ elif menu == "Minha Carteira":
             listar_ativos(df_alt)
 
     with aba_caixinhas:
-        hoje = date.today()
+        hoje = hoje_br()
         movs_todas = db.get("caixinhas_mov", [])
 
         md(f"""
@@ -2315,7 +2559,7 @@ elif menu == "Minha Carteira":
         </div>
         """)
 
-        with st.expander("➕ Criar nova caixinha"):
+        with st.expander("Criar nova caixinha"):
             with st.form("form_nova_caixinha", clear_on_submit=True):
                 cx1, cx2 = st.columns(2)
                 nome_cx = cx1.text_input("Nome da Caixinha", placeholder="Ex: Fluxo do Mês, Reserva de Emergência, Viagem").strip()
@@ -2328,7 +2572,7 @@ elif menu == "Minha Carteira":
                 if st.form_submit_button("Criar caixinha", use_container_width=True, type="primary"):
                     if nome_cx:
                         novo_cx_id = novo_id()
-                        hoje_s = date.today().strftime("%Y-%m-%d")
+                        hoje_s = hoje_br().strftime("%Y-%m-%d")
                         db.setdefault("caixinhas", []).append({
                             "id": novo_cx_id, "nome": nome_cx.title(), "banco": banco_cx.title() if banco_cx else "Nubank",
                             "saldo": float(saldo_inicial_cx) + float(rendimento_cx), "guardado_inicial": float(saldo_inicial_cx),
@@ -2371,11 +2615,11 @@ elif menu == "Minha Carteira":
                         c_guardar, c_retirar, c_editar_cx, c_del_cx = st.columns(4)
 
                         with c_guardar:
-                            with st.popover("➕", use_container_width=True, help="Guardar dinheiro"):
+                            with st.popover(":material/add:", use_container_width=True, help="Guardar dinheiro"):
                                 st.markdown(f"**Guardar na caixinha {cx['nome']}**")
                                 tipo_g = st.radio("Tipo", ["Depósito", "Rendimento"], horizontal=True, key=f"tipo_g_{cx['id']}")
                                 val_guardar = st.number_input("Valor (R$)", min_value=0.01, value=100.0, step=50.0, key=f"g_cx_{cx['id']}")
-                                dt_g = st.date_input("Data", value=date.today(), format="DD/MM/YYYY", key=f"dt_g_{cx['id']}")
+                                dt_g = st.date_input("Data", value=hoje_br(), format="DD/MM/YYYY", key=f"dt_g_{cx['id']}")
                                 obs_g = st.text_input("Observação (opcional)", key=f"obs_g_{cx['id']}")
                                 if st.button("Confirmar Entrada", key=f"btn_g_cx_{cx['id']}", type="primary", use_container_width=True):
                                     cx["saldo"] = float(cx.get("saldo", 0.0)) + float(val_guardar)
@@ -2387,10 +2631,10 @@ elif menu == "Minha Carteira":
                                     st.rerun()
 
                         with c_retirar:
-                            with st.popover("➖", use_container_width=True, help="Retirar dinheiro"):
+                            with st.popover(":material/remove:", use_container_width=True, help="Retirar dinheiro"):
                                 st.markdown(f"**Retirar da caixinha {cx['nome']}**")
                                 val_retirar = st.number_input("Valor (R$)", min_value=0.01, max_value=max(0.01, saldo_cx), value=min(100.0, max(0.01, saldo_cx)), step=50.0, key=f"r_cx_{cx['id']}")
-                                dt_r = st.date_input("Data", value=date.today(), format="DD/MM/YYYY", key=f"dt_r_{cx['id']}")
+                                dt_r = st.date_input("Data", value=hoje_br(), format="DD/MM/YYYY", key=f"dt_r_{cx['id']}")
                                 obs_r = st.text_input("Motivo (opcional)", key=f"obs_r_{cx['id']}")
                                 if st.button("Confirmar Saída", key=f"btn_r_cx_{cx['id']}", type="primary", use_container_width=True):
                                     cx["saldo"] = max(0.0, float(cx.get("saldo", 0.0)) - float(val_retirar))
@@ -2400,14 +2644,14 @@ elif menu == "Minha Carteira":
                                     st.rerun()
 
                         with c_editar_cx:
-                            with st.popover("✏️", use_container_width=True, help="Editar"):
+                            with st.popover(":material/edit:", use_container_width=True, help="Editar"):
                                 ed_nom_cx = st.text_input("Nome da Caixinha", value=cx["nome"], key=f"ed_nom_cx_{cx['id']}")
                                 ed_bco_cx = st.text_input("Banco", value=cx.get("banco", "Nubank"), key=f"ed_bco_cx_{cx['id']}")
                                 ed_sal_cx = st.number_input("Saldo atual (R$)", value=float(cx.get("saldo", 0.0)), key=f"ed_sal_cx_{cx['id']}")
                                 if st.button("Salvar Edição", key=f"btn_e_cx_{cx['id']}", type="primary", use_container_width=True):
                                     diff = float(ed_sal_cx) - float(cx.get("saldo", 0.0))
                                     if abs(diff) > 0.005:
-                                        registrar_mov_caixinha(cx["id"], "entrada" if diff > 0 else "saida", abs(diff), date.today().strftime("%Y-%m-%d"), "Ajuste manual")
+                                        registrar_mov_caixinha(cx["id"], "entrada" if diff > 0 else "saida", abs(diff), hoje_br().strftime("%Y-%m-%d"), "Ajuste manual")
                                     cx["nome"] = ed_nom_cx.title()
                                     cx["banco"] = ed_bco_cx.title()
                                     cx["saldo"] = float(ed_sal_cx)
@@ -2416,7 +2660,7 @@ elif menu == "Minha Carteira":
                                     st.rerun()
 
                         with c_del_cx:
-                            if st.button("✕", key=f"del_cx_{cx['id']}", help="Excluir caixinha"):
+                            if st.button(":material/delete:", key=f"del_cx_{cx['id']}", help="Excluir caixinha"):
                                 db["caixinhas"] = [x for x in db["caixinhas"] if x["id"] != cx["id"]]
                                 db["caixinhas_mov"] = [m for m in db["caixinhas_mov"] if m["caixinha_id"] != cx["id"]]
                                 salvar_dados(db)
@@ -2435,7 +2679,7 @@ elif menu == "Minha Carteira":
                     cv1.markdown(f"<div class='asset-tk'>{v['ticker']}</div><div class='asset-sub'>{fmt_num_limpo(v['qtd'])} un. · Venda em {datetime.strptime(v['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
                     cv2.markdown(f"<div class='cell-l'>Total recebido</div><div class='cell-big'>{fmt_moeda(v['total_recebido'])}</div>", unsafe_allow_html=True)
                     cv3.markdown(tag_v, unsafe_allow_html=True)
-                    if cv4.button("✕", key=f"del_v_{v['id']}"):
+                    if cv4.button(":material/delete:", key=f"del_v_{v['id']}"):
                         db["vendas"] = [x for x in db["vendas"] if x["id"] != v["id"]]
                         salvar_dados(db)
                         st.rerun()
@@ -2446,7 +2690,7 @@ elif menu == "Minha Carteira":
 elif menu == "Dividendos":
     hero("Agenda de Dividendos & Proventos", "Controle de proventos com cálculo automático e confirmação de recebimento.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
     m_p = c1.selectbox("Mês", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="m_prov")
     a_p = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="a_prov")
@@ -2454,7 +2698,7 @@ elif menu == "Dividendos":
 
     col_auto, col_man = st.columns([2, 1], vertical_alignment="center")
     with col_auto:
-        if st.button("⚡ Sincronizar dividendos da minha carteira", type="primary", use_container_width=True):
+        if st.button("Sincronizar dividendos da minha carteira", type="primary", use_container_width=True):
             qtd_adicionados = sincronizar_dividendos_carteira(m_p, a_p)
             if qtd_adicionados > 0:
                 st.toast(f"{qtd_adicionados} provento(s) adicionados para {MESES_PT[m_p-1]}!", icon="📈")
@@ -2463,9 +2707,9 @@ elif menu == "Dividendos":
             st.rerun()
 
     with col_man:
-        with st.popover("➕ Lançar manualmente", use_container_width=True):
+        with st.popover("Lançar manualmente", use_container_width=True):
             with st.form("form_novo_prov_man", clear_on_submit=True):
-                dt_pagamento = st.date_input("Data de Pagamento", value=date.today(), format="DD/MM/YYYY")
+                dt_pagamento = st.date_input("Data de Pagamento", value=hoje_br(), format="DD/MM/YYYY")
                 lista_tickers = [a["ticker"] for a in db["ativos"] if a["classe"] in ("Ações", "FIIs", "Renda Fixa", "Internacional")] or ["Outro"]
                 tick_p = st.selectbox("Ativo", lista_tickers)
                 tipo_p = st.selectbox("Tipo de Provento", ["Rendimento FII", "Dividendo / JCP", "Juros Renda Fixa", "Outro"])
@@ -2507,14 +2751,14 @@ elif menu == "Dividendos":
                     if r["status"] == "recebido":
                         md("<span class='badge-status status-alta'>Já caiu na conta</span>")
                     else:
-                        if st.button("Confirmar que caiu ✅", key=f"conf_{r['id']}", use_container_width=True):
+                        if st.button("Confirmar recebimento", key=f"conf_{r['id']}", use_container_width=True):
                             r["status"] = "recebido"
                             salvar_dados(db)
                             st.toast("Recebimento confirmado!", icon="💰")
                             st.rerun()
 
                 with c4:
-                    if st.button("✕", key=f"del_prv_{r['id']}"):
+                    if st.button(":material/delete:", key=f"del_prv_{r['id']}"):
                         db["proventos"] = [p for p in db["proventos"] if p["id"] != r["id"]]
                         salvar_dados(db)
                         st.rerun()
@@ -2525,7 +2769,7 @@ elif menu == "Dividendos":
 elif menu == "Cartão de Crédito":
     hero("Faturas & Cartão de Crédito", "Fechamento dia 15 e vencimento dia 22. Clique no mês desejado para ver a fatura na hora.")
 
-    hoje = date.today()
+    hoje = hoje_br()
 
     if "fatura_mes_num" not in st.session_state:
         st.session_state["fatura_mes_num"] = hoje.month
@@ -2555,7 +2799,7 @@ elif menu == "Cartão de Crédito":
     fatura_chave_sel = f"{ano_sel:04d}-{mes_sel:02d}"
     mes_fat_nome = MESES_PT[mes_sel - 1]
 
-    with st.expander("➕ Lançar nova compra no cartão de crédito"):
+    with st.expander("Lançar nova compra no cartão de crédito"):
         with st.form("form_compra_cartao", clear_on_submit=True):
             f_c1, f_c2, f_c3 = st.columns(3)
             desc_compra = f_c1.text_input("Nome da Compra / Loja", placeholder="Ex: Celular, Zara, Curso").strip()
@@ -2569,7 +2813,7 @@ elif menu == "Cartão de Crédito":
             cashback_compra = f_c7.number_input("Cashback Ganho (R$)", min_value=0.0, value=0.0, step=0.50)
 
             f_c8, f_c9, f_c10 = st.columns([1.2, 1.4, 1.4])
-            dt_compra = f_c8.date_input("Data da Compra", value=date.today(), format="DD/MM/YYYY")
+            dt_compra = f_c8.date_input("Data da Compra", value=hoje_br(), format="DD/MM/YYYY")
 
             mes_sug = dt_compra.month + (1 if dt_compra.day >= 15 else 0)
             ano_sug = dt_compra.year + (1 if mes_sug > 12 else 0)
@@ -2669,7 +2913,7 @@ elif menu == "Cartão de Crédito":
                                   hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>")
         st.plotly_chart(fig_faturas, use_container_width=True, config=CONFIG_PLOTLY)
 
-        md("<div style='font-weight:700;color:#334155;margin:10px 0 6px;font-size:.88rem'>👇 Clique no mês para abrir a fatura na hora:</div>")
+        md("<div style='font-weight:700;color:#334155;margin:10px 0 6px;font-size:.88rem'>Selecione o mês para abrir a fatura:</div>")
         chaves_botoes = [k for k in sorted(projecao_meses.keys())
                          if k >= fatura_atual_real_chave and int(k.split("-")[0]) in anos_opcoes][:12]
         for i in range(0, len(chaves_botoes), 6):
@@ -2699,7 +2943,7 @@ elif menu == "Cartão de Crédito":
                 c_cash.markdown(f"<span class='badge-status status-alta'>+{fmt_moeda(item['cashback'])}</span>" if item["cashback"] > 0 else "<span style='font-size:.78rem;color:#94A3B8'>Sem cashback</span>", unsafe_allow_html=True)
 
                 with c_ed:
-                    with st.popover("✏️", use_container_width=True):
+                    with st.popover(":material/edit:", use_container_width=True):
                         e_desc = st.text_input("Descrição", value=item["descricao"], key=f"ed_d_{item['id']}")
                         idx_cat_c = LISTA_CATEGORIAS_CARTAO.index(item["categoria"]) if item["categoria"] in LISTA_CATEGORIAS_CARTAO else 0
                         e_cat = st.selectbox("Categoria", LISTA_CATEGORIAS_CARTAO, index=idx_cat_c, key=f"ed_cat_{item['id']}")
@@ -2721,7 +2965,7 @@ elif menu == "Cartão de Crédito":
                             st.rerun()
 
                 with c_del:
-                    if st.button("✕", key=f"del_cp_{item['id']}"):
+                    if st.button(":material/delete:", key=f"del_cp_{item['id']}"):
                         db["cartao_compras"] = [x for x in db["cartao_compras"] if x["id"] != item["id"]]
                         salvar_dados(db)
                         st.rerun()
@@ -2732,14 +2976,14 @@ elif menu == "Cartão de Crédito":
 elif menu == "Conta & Débito":
     hero("Extrato de Conta & Débito", "Controle tudo o que entra e sai da sua conta à vista: salário, vale, PIX e débito.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
     mes_deb = c1.selectbox("Mês do Extrato", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="deb_mes")
     ano_deb = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="deb_ano")
     chave_deb_sel = f"{ano_deb:04d}-{mes_deb:02d}"
     nome_mes_deb = MESES_PT[mes_deb - 1]
 
-    with st.expander("➕ Lançar nova movimentação (entrada ou saída)"):
+    with st.expander("Lançar nova movimentação (entrada ou saída)"):
         with st.form("form_nova_transacao", clear_on_submit=True):
             t1, t2 = st.columns(2)
             tipo_transacao = t1.radio("Tipo:", ["Entrada (+)", "Saída (-)"], horizontal=True)
@@ -2748,7 +2992,7 @@ elif menu == "Conta & Débito":
             t3, t4, t5 = st.columns(3)
             val_transacao = t3.number_input("Valor (R$)", min_value=0.01, value=150.0, step=10.0)
             cat_transacao = t4.selectbox("Categoria", LISTA_CATEGORIAS_DEBITO)
-            dt_transacao = t5.date_input("Data da Operação", value=date.today(), format="DD/MM/YYYY")
+            dt_transacao = t5.date_input("Data da Operação", value=hoje_br(), format="DD/MM/YYYY")
 
             if st.form_submit_button("Lançar na conta", use_container_width=True, type="primary"):
                 if desc_transacao:
@@ -2792,7 +3036,7 @@ elif menu == "Conta & Débito":
                 c2.markdown(f"<span style='font-size:1.15rem;font-weight:800;color:{cor_val};font-variant-numeric:tabular-nums'>{sinal} {fmt_moeda(t['valor'])}</span>", unsafe_allow_html=True)
 
                 with c3:
-                    with st.popover("✏️", use_container_width=True):
+                    with st.popover(":material/edit:", use_container_width=True):
                         e_tipo = st.selectbox("Tipo", ["Entrada (+)", "Saída (-)"], index=0 if t["tipo"] == "Entrada (+)" else 1, key=f"e_tip_{t['id']}")
                         e_desc = st.text_input("Descrição", value=t["descricao"], key=f"e_d_deb_{t['id']}")
                         e_val = st.number_input("Valor (R$)", value=float(t["valor"]), key=f"e_v_deb_{t['id']}")
@@ -2809,7 +3053,7 @@ elif menu == "Conta & Débito":
                             st.rerun()
 
                 with c4:
-                    if st.button("✕", key=f"del_deb_{t['id']}"):
+                    if st.button(":material/delete:", key=f"del_deb_{t['id']}"):
                         db["transacoes_debito"] = [x for x in db["transacoes_debito"] if x["id"] != t["id"]]
                         salvar_dados(db)
                         st.rerun()
@@ -2818,39 +3062,38 @@ elif menu == "Conta & Débito":
 # TELA: DEVEDORES
 # ==============================================================================
 elif menu == "Devedores":
-    hero("Devedores & Valores a Receber", "Cálculo real de meses decorridos, parcelas vencidas e controle de cobranças.")
+    hero("Devedores", "Valores a receber, vencimentos de cada parcela e recebimentos registrados. O atraso é calculado pela data de vencimento.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     nomes_cadastrados = sorted(list(set(d["nome"].strip().title() for d in db.get("devedores", []))))
 
-    with st.expander("➕ Adicionar nova cobrança / empréstimo", expanded=not db.get("devedores", [])):
+    with st.expander("Adicionar nova cobrança", expanded=not db.get("devedores", [])):
         with st.form("form_novo_devedor", clear_on_submit=True):
             c1_nome, c2_nome = st.columns(2)
-            nome_escolhido = c1_nome.selectbox("👤 Escolher Pessoa Já Cadastrada:", ["-- Nenhuma (Digitar ao lado) --"] + nomes_cadastrados if nomes_cadastrados else ["Nenhuma cadastrada"])
-            nome_digitado = c2_nome.text_input("➕ OU Digite o Nome de uma Nova Pessoa:", placeholder="Ex: Rafael, Julia").strip()
+            nome_escolhido = c1_nome.selectbox("Pessoa já cadastrada", ["-- Nenhuma (digitar ao lado) --"] + nomes_cadastrados if nomes_cadastrados else ["Nenhuma cadastrada"])
+            nome_digitado = c2_nome.text_input("Ou digite o nome de uma nova pessoa", placeholder="Ex: Rafael, Julia").strip()
 
             d1, d2 = st.columns(2)
             desc_p = d1.text_input("Descrição do que foi", placeholder="Ex: Óculos, Celular, Camisa").strip()
-            forma_p = d2.selectbox("Forma do Empréstimo", ["💳 Cartão de Crédito", "💸 PIX / Dinheiro"])
+            forma_p = d2.selectbox("Forma do empréstimo", ["💳 Cartão de Crédito", "💸 PIX / Dinheiro"])
 
             d3, d4, d5, d6 = st.columns(4)
-            val_p = d3.number_input("Valor Total (R$)", min_value=1.0, value=1305.60, step=50.0)
-            parc_total = d4.number_input("Número de Parcelas", min_value=1, max_value=60, value=6, step=1)
-            val_parc_manual = d5.number_input("Valor de cada Parcela (R$)", min_value=0.0, value=217.60, step=10.0)
-            valor_ja_pago_inicial = d6.number_input("Quanto ela JÁ PAGOU (R$)?", min_value=0.0, value=0.0, step=50.0)
+            val_p = d3.number_input("Valor total (R$)", min_value=1.0, value=100.0, step=50.0)
+            parc_total = d4.number_input("Número de parcelas", min_value=1, max_value=60, value=1, step=1)
+            val_parc_manual = d5.number_input("Valor de cada parcela (R$)", min_value=0.0, value=0.0, step=10.0, help="Deixe 0,00 para dividir o total igualmente pelas parcelas.")
+            valor_ja_pago_inicial = d6.number_input("Já recebido até hoje (R$)", min_value=0.0, value=0.0, step=50.0)
 
             d7, d8 = st.columns(2)
-            data_emp = d7.date_input("Data de Início", value=date.today(), format="DD/MM/YYYY")
-            dia_venc_mes = d8.number_input("Dia do Vencimento no Mês", min_value=1, max_value=31, value=20, step=1)
+            data_emp = d7.date_input("Data da compra / empréstimo", value=hoje, format="DD/MM/YYYY")
+            prim_venc = d8.date_input("Vencimento da 1ª parcela", value=_add_meses(hoje, 1), format="DD/MM/YYYY",
+                                      help="As demais parcelas vencem no mesmo dia dos meses seguintes.")
 
             if st.form_submit_button("Cadastrar cobrança", use_container_width=True, type="primary"):
-                nome_final = nome_digitado.title() if nome_digitado else (nome_escolhido.strip().title() if nome_escolhido not in ["-- Nenhuma (Digitar ao lado) --", "Nenhuma cadastrada"] else None)
+                nome_final = nome_digitado.title() if nome_digitado else (nome_escolhido.strip().title() if nome_escolhido not in ["-- Nenhuma (digitar ao lado) --", "Nenhuma cadastrada"] else None)
                 if not nome_final:
-                    st.error("Informe o nome da pessoa!")
+                    st.error("Informe o nome da pessoa.")
                 else:
                     parc_calc = float(val_parc_manual) if val_parc_manual > 0 else (float(val_p) / int(parc_total))
-                    _, max_d = calendar.monthrange(data_emp.year, data_emp.month)
-                    dt_venc_calc = date(data_emp.year, data_emp.month, min(int(dia_venc_mes), max_d))
                     db.setdefault("devedores", []).append({
                         "id": int(datetime.now().timestamp() * 1000), "nome": nome_final,
                         "descricao": desc_p if desc_p else "Empréstimo", "forma": forma_p,
@@ -2858,125 +3101,203 @@ elif menu == "Devedores":
                         "valor_parcela": float(parc_calc), "total_pago_reais": float(valor_ja_pago_inicial),
                         "parcelas_pagas": int(float(valor_ja_pago_inicial) / parc_calc) if parc_calc > 0 else 0,
                         "data_emprestimo": data_emp.strftime("%Y-%m-%d"),
-                        "data_vencimento": dt_venc_calc.strftime("%Y-%m-%d"),
+                        "primeiro_vencimento": prim_venc.strftime("%Y-%m-%d"),
+                        "data_vencimento": prim_venc.strftime("%Y-%m-%d"),
+                        "dia_vencimento": int(prim_venc.day),
                         "pagamentos": [], "status": "quitado" if float(valor_ja_pago_inicial) >= float(val_p) - 0.05 else "pendente"
                     })
                     salvar_dados(db)
-                    st.toast("Cobrança cadastrada!", icon="🤝")
+                    st.toast("Cobrança cadastrada.", icon="✅")
                     st.rerun()
 
     devedores_lista = db.get("devedores", [])
     if not devedores_lista:
-        vazio("Ninguém está te devendo no momento.", "🤝")
+        vazio("Ninguém está te devendo no momento.")
     else:
+        # ---- resumo geral ----
+        infos_all = [calcular_atraso_real_divida(d) for d in devedores_lista]
+        tot_receber = sum(i["falta_total"] for i in infos_all)
+        tot_atrasado = sum(i["valor_atraso"] for i in infos_all)
+        chave_hoje = hoje.strftime("%Y-%m")
+        md(f"""
+        <div class="stats">
+          <div class="stat"><div class="stat-n" style="color:#0B1220">{fmt_moeda(tot_receber)}</div><div class="stat-l">Total a receber</div></div>
+          <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(tot_atrasado)}</div><div class="stat-l">Em atraso (parcelas vencidas)</div></div>
+          <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(previsto_devedores_no_mes(chave_hoje))}</div><div class="stat-l">Parcelas que vencem em {MESES_PT[hoje.month-1]}</div></div>
+          <div class="stat"><div class="stat-n" style="color:#15803D">{fmt_moeda(recebido_devedores_no_mes(chave_hoje))}</div><div class="stat-l">Recebido em {MESES_PT[hoje.month-1]}</div></div>
+        </div>
+        """)
+
         pessoas_agrupadas = {}
         for d in devedores_lista:
-            n_pessoa = d["nome"].strip().title()
-            pessoas_agrupadas.setdefault(n_pessoa, []).append(d)
+            pessoas_agrupadas.setdefault(d["nome"].strip().title(), []).append(d)
 
         for nome_pessoa, dividas in sorted(pessoas_agrupadas.items()):
             tot_falta = sum(calcular_atraso_real_divida(it)["falta_total"] for it in dividas)
             tot_atraso = sum(calcular_atraso_real_divida(it)["valor_atraso"] for it in dividas)
+            cor_topo = "#B91C1C" if tot_atraso > 0 else ("#2563EB" if tot_falta > 0 else "#15803D")
+            md(f"""
+            <div class="person">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="avatar" style="background:#E6F6F4;color:#0F766E">{html.escape(nome_pessoa[:2].upper())}</div>
+                <div style="font-size:1.05rem;font-weight:800;color:#0B1220;letter-spacing:-.01em">{html.escape(nome_pessoa)}</div>
+              </div>
+              <div style="font-size:.88rem;font-weight:600;color:#64748B">Total que deve: <b style="color:{cor_topo};font-size:1.02rem">{fmt_moeda(tot_falta)}</b></div>
+            </div>
+            """)
 
-            with st.container():
-                cor_topo = "#B91C1C" if tot_atraso > 0 else ("#2563EB" if tot_falta > 0 else "#15803D")
-                md(f"""
-                <div class="person">
-                  <div style="display:flex;align-items:center;gap:12px">
-                    <div class="avatar" style="background:#E6F6F4;color:#0F766E">{html.escape(nome_pessoa[:2].upper())}</div>
-                    <div style="font-size:1.12rem;font-weight:800;color:#0B1220;letter-spacing:-.01em">{html.escape(nome_pessoa)}</div>
-                  </div>
-                  <div style="font-size:.92rem;font-weight:600;color:#64748B">Total que te deve: <b style="color:{cor_topo};font-size:1.05rem">{fmt_moeda(tot_falta)}</b></div>
-                </div>
-                """)
+            for dev in dividas:
+                info = calcular_atraso_real_divida(dev)
+                forma_tag = dev.get("forma", "💳 Cartão de Crédito")
+                forma_txt = "Cartão" if "Cartão" in forma_tag else "PIX / Dinheiro"
+                forma_class = "chip-cartao" if "Cartão" in forma_tag else "chip-pix"
+                dt_emp_str = dev.get("data_emprestimo", dev.get("data", "2026-01-01"))
+                pagamentos = dev.get("pagamentos", [])
+                soma_pgtos = sum(float(p.get("valor", 0.0)) for p in pagamentos)
+                valor_inicial = max(0.0, info["total_pago"] - soma_pgtos)
 
-                for dev in dividas:
-                    info = calcular_atraso_real_divida(dev)
-                    forma_tag = dev.get("forma", "💳 Cartão de Crédito")
-                    forma_class = "chip-cartao" if "Cartão" in forma_tag else "chip-pix"
-                    dt_emp_str = dev.get("data_emprestimo", dev.get("data", "2026-01-01"))
+                with st.container(border=True):
+                    c_desc, c_parc, c_val, c_abater, c_acoes = st.columns([1.8, 1.3, 1.5, 1.1, 0.7], vertical_alignment="center")
+                    with c_desc:
+                        md(f"""
+                        <div>
+                          <div class="asset-tk">{html.escape(dev['descricao'])} <span class="chip {forma_class}">{forma_txt}</span></div>
+                          <div style="margin-top:5px">{info['badge']}</div>
+                          <div class="asset-sub" style="margin-top:4px">Início {datetime.strptime(dt_emp_str, '%Y-%m-%d').strftime('%d/%m/%Y')} · {info['msg_detalhe']}</div>
+                        </div>
+                        """)
 
-                    with st.container(border=True):
-                        c_desc, c_parc, c_val, c_abater, c_acoes = st.columns([1.7, 1.3, 1.2, 1.3, 0.6], vertical_alignment="center")
-                        with c_desc:
+                    with c_parc:
+                        if info["status"] == "quitado":
+                            md(f"<div class='cell-l'>Total recebido</div><div class='cell-big' style='color:#15803D'>{fmt_moeda(info['total_pago'])}</div>")
+                        else:
                             md(f"""
                             <div>
-                              <div class="asset-tk">🛍️ {html.escape(dev['descricao'])} <span class="chip {forma_class}">{forma_tag}</span></div>
-                              <div style="margin-top:5px">{info['badge']}</div>
-                              <div class="asset-sub" style="margin-top:4px">Início: {datetime.strptime(dt_emp_str, '%Y-%m-%d').strftime('%d/%m/%Y')} · {info['msg_detalhe']}</div>
+                              <div class="cell-l">{dev['parcelas_total']}x de</div>
+                              <div class="cell-big">{fmt_moeda(info['v_parc'])}</div>
+                              <div class="cell-l" style="margin-top:3px">Recebido: <b style="color:#15803D">{fmt_moeda(info['total_pago'])}</b></div>
                             </div>
                             """)
 
-                        with c_parc:
-                            if info["status"] == "quitado":
-                                md("<div style='font-size:.9rem;color:#15803D;font-weight:800'>100% PAGO</div>")
-                            else:
-                                md(f"""
-                                <div>
-                                  <div style="font-size:.95rem;font-weight:750;color:#2563EB">{dev['parcelas_total']}x de {fmt_moeda(info['v_parc'])}</div>
-                                  <div style="font-size:.82rem;color:#B91C1C;font-weight:750;margin-top:2px">Falta: {fmt_moeda(info['falta_total'])}</div>
-                                  <div style="font-size:.76rem;color:#15803D;font-weight:600;margin-top:2px">Já pago: {fmt_moeda(info['total_pago'])}</div>
-                                </div>
-                                """)
+                    with c_val:
+                        if info["status"] == "quitado":
+                            md("<div class='cell-l'>Situação</div><div class='cell-big' style='color:#15803D'>Quitado</div>")
+                        elif info["valor_atraso"] > 0:
+                            md(f"""
+                            <div>
+                              <div class="cell-l">Em atraso</div>
+                              <div class="cell-big" style="color:#B91C1C">{fmt_moeda(info['valor_atraso'])}</div>
+                              <div class="cell-l" style="margin-top:3px">Falta no total: <b style="color:#0B1220">{fmt_moeda(info['falta_total'])}</b></div>
+                            </div>
+                            """)
+                        else:
+                            md(f"""
+                            <div>
+                              <div class="cell-l">Próxima parcela</div>
+                              <div class="cell-big">{fmt_moeda(min(info['v_parc'], info['falta_total']))}</div>
+                              <div class="cell-l" style="margin-top:3px">Vence em <b style="color:#0B1220">{info['proximo_venc'].strftime('%d/%m/%Y')}</b></div>
+                            </div>
+                            """)
 
-                        with c_val:
-                            if info["status"] == "quitado":
-                                md(f"<span style='font-size:.95rem;color:#15803D;font-weight:700'>Total: {fmt_moeda(info['total_pago'])}</span>")
-                            elif info["valor_atraso"] > 0:
-                                md(f"""
-                                <div>
-                                  <div style="font-size:1.05rem;font-weight:800;color:#B91C1C">Atraso: {fmt_moeda(info['parcela_mes'])}</div>
-                                  <div style="font-size:.78rem;color:#B91C1C;font-weight:600">Parcela do mês em atraso</div>
-                                </div>
-                                """)
-                            else:
-                                md(f"""
-                                <div>
-                                  <div style="font-size:1.05rem;font-weight:750;color:#15803D">Em dia</div>
-                                  <div style="font-size:.78rem;color:#64748B">Próxima: {fmt_moeda(info['v_parc'])}</div>
-                                </div>
-                                """)
+                    with c_abater:
+                        if info["status"] != "quitado":
+                            with st.popover("Registrar recebimento", use_container_width=True):
+                                st.markdown("**Registrar recebimento**")
+                                st.caption(f"Parcela: {fmt_moeda(info['v_parc'])} · Falta no total: {fmt_moeda(info['falta_total'])}")
+                                v_abt = st.number_input(
+                                    "Valor recebido (R$)", min_value=0.01, max_value=float(max(0.01, info["falta_total"])),
+                                    value=float(max(0.01, min(info["v_parc"], info["falta_total"]))), step=10.0, key=f"abt_{dev['id']}")
+                                dt_abt = st.date_input("Data do recebimento", value=hoje, format="DD/MM/YYYY", key=f"dt_abt_{dev['id']}")
+                                if st.button("Confirmar recebimento", key=f"btn_abt_{dev['id']}", type="primary", use_container_width=True):
+                                    novo_p = info["total_pago"] + float(v_abt)
+                                    dev["total_pago_reais"] = round(float(novo_p), 2)
+                                    dev.setdefault("pagamentos", []).append({"data": dt_abt.strftime("%Y-%m-%d"), "valor": float(v_abt)})
+                                    dev["parcelas_pagas"] = int(novo_p / info["v_parc"]) if info["v_parc"] > 0 else 0
+                                    dev["status"] = "quitado" if novo_p >= info["total_contratado"] - 0.05 else "pendente"
+                                    salvar_dados(db)
+                                    st.toast("Recebimento registrado.", icon="✅")
+                                    st.rerun()
 
-                        with c_abater:
-                            if info["status"] != "quitado":
-                                with st.popover("💰 Abater pagto", use_container_width=True):
-                                    v_abt = st.number_input("Valor recebido (R$)", min_value=0.01, value=float(info["valor_atraso"] if info["valor_atraso"] > 0 else min(info["falta_total"], info["v_parc"])), key=f"abt_{dev['id']}")
-                                    dt_abt = st.date_input("Data do recebimento", value=date.today(), format="DD/MM/YYYY", key=f"dt_abt_{dev['id']}")
-                                    if st.button("Confirmar Abatimento", key=f"btn_abt_{dev['id']}", type="primary"):
-                                        novo_p = info["total_pago"] + float(v_abt)
-                                        dev["total_pago_reais"] = float(novo_p)
-                                        dev.setdefault("pagamentos", []).append({"data": dt_abt.strftime("%Y-%m-%d"), "valor": float(v_abt)})
-                                        dev["parcelas_pagas"] = int(novo_p / info["v_parc"]) if info["v_parc"] > 0 else 0
-                                        if novo_p >= info["total_contratado"] - 0.05:
-                                            dev["status"] = "quitado"
-                                        salvar_dados(db)
-                                        st.toast("Valor abatido!", icon="💰")
-                                        st.rerun()
-
-                        with c_acoes:
-                            col_ed, col_dl = st.columns(2)
-                            with col_ed:
-                                with st.popover("✏️", use_container_width=True):
-                                    ed_n = st.text_input("Nome", value=dev["nome"], key=f"ed_n_{dev['id']}")
-                                    ed_d = st.text_input("Descrição", value=dev["descricao"], key=f"ed_d_{dev['id']}")
-                                    ed_v = st.number_input("Total (R$)", value=float(dev["valor_total"]), key=f"ed_v_{dev['id']}")
-                                    ed_vp = st.number_input("Valor Parcela", value=float(info["v_parc"]), key=f"ed_vp_{dev['id']}")
-                                    ed_pg = st.number_input("Total JÁ PAGO (R$)", value=float(info["total_pago"]), key=f"ed_pg_{dev['id']}")
-                                    if st.button("Salvar", key=f"btn_e_dev_{dev['id']}", type="primary"):
-                                        dev["nome"] = ed_n.title()
-                                        dev["descricao"] = ed_d
-                                        dev["valor_total"] = float(ed_v)
-                                        dev["valor_parcela"] = float(ed_vp)
-                                        dev["total_pago_reais"] = float(ed_pg)
-                                        dev["parcelas_pagas"] = int(float(ed_pg) / float(ed_vp)) if float(ed_vp) > 0 else 0
-                                        salvar_dados(db)
-                                        st.toast("Atualizado!")
-                                        st.rerun()
-                            with col_dl:
-                                if st.button("✕", key=f"del_dev_{dev['id']}"):
+                    with c_acoes:
+                        col_ed, col_dl = st.columns(2)
+                        with col_ed:
+                            with st.popover(":material/edit:", use_container_width=True, help="Editar cobrança"):
+                                st.markdown("**Editar cobrança**")
+                                ed_n = st.text_input("Nome", value=dev["nome"], key=f"ed_n_{dev['id']}")
+                                ed_d = st.text_input("Descrição", value=dev["descricao"], key=f"ed_d_{dev['id']}")
+                                ed_v = st.number_input("Valor total (R$)", min_value=1.0, value=float(dev["valor_total"]), key=f"ed_v_{dev['id']}")
+                                ed_np = st.number_input("Nº de parcelas", min_value=1, max_value=60, value=int(dev["parcelas_total"]), key=f"ed_np_{dev['id']}")
+                                ed_vp = st.number_input("Valor da parcela (R$)", min_value=0.01, value=float(info["v_parc"]), key=f"ed_vp_{dev['id']}")
+                                try:
+                                    _pv = datetime.strptime(str(dev.get("primeiro_vencimento") or dev.get("data_vencimento") or dt_emp_str), "%Y-%m-%d").date()
+                                except Exception:
+                                    _pv = hoje
+                                ed_pv = st.date_input("Vencimento da 1ª parcela", value=_pv, format="DD/MM/YYYY", key=f"ed_pv_{dev['id']}")
+                                ed_ini = st.number_input("Recebido antes do cadastro (R$)", min_value=0.0, value=float(valor_inicial), key=f"ed_ini_{dev['id']}",
+                                                         help="Valor já recebido antes de começar a registrar aqui. Os recebimentos com data ficam no histórico.")
+                                if st.button("Salvar alterações", key=f"btn_e_dev_{dev['id']}", type="primary", use_container_width=True):
+                                    dev["nome"] = ed_n.strip().title()
+                                    dev["descricao"] = ed_d
+                                    dev["valor_total"] = float(ed_v)
+                                    dev["parcelas_total"] = int(ed_np)
+                                    dev["valor_parcela"] = float(ed_vp)
+                                    dev["primeiro_vencimento"] = ed_pv.strftime("%Y-%m-%d")
+                                    dev["data_vencimento"] = ed_pv.strftime("%Y-%m-%d")
+                                    dev["dia_vencimento"] = int(ed_pv.day)
+                                    dev["total_pago_reais"] = round(float(ed_ini) + soma_pgtos, 2)
+                                    dev["parcelas_pagas"] = int(dev["total_pago_reais"] / float(ed_vp)) if float(ed_vp) > 0 else 0
+                                    dev["status"] = "quitado" if dev["total_pago_reais"] >= float(ed_v) - 0.05 else "pendente"
+                                    salvar_dados(db)
+                                    st.toast("Cobrança atualizada.", icon="✅")
+                                    st.rerun()
+                        with col_dl:
+                            with st.popover(":material/delete:", use_container_width=True, help="Excluir cobrança"):
+                                st.markdown("**Excluir esta cobrança?**")
+                                st.caption("Os recebimentos registrados nela também serão removidos.")
+                                if st.button("Sim, excluir", key=f"del_dev_{dev['id']}", type="primary", use_container_width=True):
                                     db["devedores"] = [x for x in db["devedores"] if x["id"] != dev["id"]]
                                     salvar_dados(db)
                                     st.rerun()
+
+                    # ---- histórico de recebimentos (data + valor), com ajuste/remoção ----
+                    if pagamentos or valor_inicial > 0:
+                        with st.expander(f"Histórico de recebimentos ({len(pagamentos)})"):
+                            if valor_inicial > 0:
+                                st.caption(f"Recebido antes do cadastro: {fmt_moeda(valor_inicial)}")
+                            for pi, pg in sorted(enumerate(pagamentos), key=lambda t: str(t[1].get("data", ""))):
+                                try:
+                                    dt_pg_txt = datetime.strptime(str(pg["data"]), "%Y-%m-%d").strftime("%d/%m/%Y")
+                                except Exception:
+                                    dt_pg_txt = str(pg.get("data", ""))
+                                h1, h2, h3, h4 = st.columns([1.2, 1.2, 0.6, 0.6], vertical_alignment="center")
+                                h1.markdown(f"<div class='cell-l'>Data</div><div class='cell-v'>{dt_pg_txt}</div>", unsafe_allow_html=True)
+                                h2.markdown(f"<div class='cell-l'>Valor</div><div class='cell-v' style='color:#15803D'>{fmt_moeda(pg['valor'])}</div>", unsafe_allow_html=True)
+                                with h3:
+                                    with st.popover(":material/edit:", use_container_width=True, help="Ajustar data / valor"):
+                                        st.markdown("**Ajustar recebimento**")
+                                        try:
+                                            _dpg = datetime.strptime(str(pg["data"]), "%Y-%m-%d").date()
+                                        except Exception:
+                                            _dpg = hoje
+                                        n_dt = st.date_input("Data", value=_dpg, format="DD/MM/YYYY", key=f"pg_dt_{dev['id']}_{pi}")
+                                        n_vl = st.number_input("Valor (R$)", min_value=0.01, value=float(pg["valor"]), step=10.0, key=f"pg_vl_{dev['id']}_{pi}")
+                                        if st.button("Salvar", key=f"pg_sv_{dev['id']}_{pi}", type="primary", use_container_width=True):
+                                            delta = float(n_vl) - float(pg["valor"])
+                                            pg["valor"] = float(n_vl)
+                                            pg["data"] = n_dt.strftime("%Y-%m-%d")
+                                            dev["total_pago_reais"] = round(max(0.0, float(dev.get("total_pago_reais", 0.0)) + delta), 2)
+                                            dev["status"] = "quitado" if dev["total_pago_reais"] >= float(dev["valor_total"]) - 0.05 else "pendente"
+                                            salvar_dados(db)
+                                            st.toast("Recebimento ajustado.", icon="✅")
+                                            st.rerun()
+                                with h4:
+                                    if st.button(":material/delete:", key=f"pg_del_{dev['id']}_{pi}", help="Remover este recebimento", use_container_width=True):
+                                        dev["total_pago_reais"] = round(max(0.0, float(dev.get("total_pago_reais", 0.0)) - float(pg["valor"])), 2)
+                                        dev["pagamentos"] = [x for j, x in enumerate(dev["pagamentos"]) if j != pi]
+                                        dev["status"] = "quitado" if dev["total_pago_reais"] >= float(dev["valor_total"]) - 0.05 else "pendente"
+                                        salvar_dados(db)
+                                        st.toast("Recebimento removido.", icon="🗑️")
+                                        st.rerun()
 
 # ==============================================================================
 # TELA: METAS
