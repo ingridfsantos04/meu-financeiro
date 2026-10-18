@@ -1437,12 +1437,12 @@ def sincronizar_dividendos_carteira(mes, ano):
 # ==============================================================================
 MENU_ITENS = [
     "Visão Geral",
-    "Resumo & Diagnóstico",
+    "Resumo",
     "Contas Fixas",
     "Minha Carteira",
     "Dividendos",
     "Cartão de Crédito",
-    "Conta & Débito",
+    "Movimentações",
     "Devedores",
     "Metas"
 ]
@@ -1989,8 +1989,8 @@ def pagina_visao_geral() -> None:
 # TELA: RESUMO & DIAGNÓSTICO
 # ==============================================================================
 def pagina_resumo_diagnostico() -> None:
-    """Tela: Resumo & Diagnóstico."""
-    hero("Resumo & Diagnóstico Financeiro", "Tenha a visão exata do seu dinheiro, do que pode gastar, e dispare o relatório direto para seu e-mail.")
+    """Tela: Resumo."""
+    hero("Resumo", "Veja quanto você tem, o que não deve gastar no mês e quanto pode gastar com segurança.")
 
     hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
@@ -2992,8 +2992,8 @@ def pagina_cartao() -> None:
 # TELA: CONTA & DÉBITO
 # ==============================================================================
 def pagina_conta_debito() -> None:
-    """Tela: Conta & Débito."""
-    hero("Extrato de Conta & Débito", "Controle tudo o que entra e sai da sua conta à vista: salário, vale, PIX e débito.")
+    """Tela: Movimentações."""
+    hero("Movimentações", "Controle tudo o que entra e sai da sua conta à vista: salário, vale, PIX e débito.")
 
     hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
@@ -3374,12 +3374,12 @@ def pagina_metas() -> None:
 # ==============================================================================
 PAGINAS = {
     "Visão Geral": pagina_visao_geral,
-    "Resumo & Diagnóstico": pagina_resumo_diagnostico,
+    "Resumo": pagina_resumo_diagnostico,
     "Contas Fixas": pagina_contas_fixas,
     "Minha Carteira": pagina_carteira,
     "Dividendos": pagina_dividendos,
     "Cartão de Crédito": pagina_cartao,
-    "Conta & Débito": pagina_conta_debito,
+    "Movimentações": pagina_conta_debito,
     "Devedores": pagina_devedores,
     "Metas": pagina_metas,
 }
