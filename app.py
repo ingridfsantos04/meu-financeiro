@@ -940,6 +940,28 @@ def salvar_dados(dados):
     st.session_state["db_invest"] = dados
     salvar_dados_usuario(dados, user_logado)
 
+def somar_ou_adicionar_ativo(novo):
+    """Se o ativo (mesmo ticker e classe) já existe na carteira, soma a quantidade e
+    recalcula o preço médio ponderado. Se não existe, cadastra como novo."""
+    tk = str(novo["ticker"]).strip().upper()
+    cl = novo["classe"]
+    for a in db["ativos"]:
+        if str(a.get("ticker", "")).strip().upper() == tk and a.get("classe") == cl:
+            q_old, q_new = float(a["qtd"]), float(novo["qtd"])
+            pm_old, pm_new = float(a["pm"]), float(novo["pm"])
+            q_tot = round(q_old + q_new, 8)
+            a["pm"] = float((q_old * pm_old + q_new * pm_new) / q_tot) if q_tot > 0 else pm_new
+            a["qtd"] = q_tot if (cl in CLASSES_ALT or abs(q_tot - round(q_tot)) > 1e-9) else int(round(q_tot))
+            a["preco_atual"] = float(novo.get("preco_atual", a.get("preco_atual", pm_new)))
+            if novo.get("data_compra"):
+                a["data_compra"] = novo["data_compra"]
+            if novo.get("corretora"):
+                a["corretora"] = novo["corretora"]
+            st.toast(f"{tk} já estava na carteira: quantidade somada e preço médio atualizado!", icon="🔁")
+            return True
+    db["ativos"].append(novo)
+    return False
+
 iniciais = "".join([part[0] for part in NOME_USUARIO_LOGADO.split()[:2]]).upper() or "UF"
 
 # ==============================================================================
@@ -1992,7 +2014,7 @@ elif menu == "Minha Carteira":
                         live = preco_por_chave(classe_in, ticker_in)
                         if live:
                             preco_final = live
-                        db["ativos"].append({
+                        somar_ou_adicionar_ativo({
                             "id": novo_id(), "ticker": ticker_in.upper(), "nome": nome_in if nome_in else ticker_in.upper(),
                             "classe": classe_in, "qtd": int(qtd_in), "pm": float(pm_in), "preco_atual": preco_final
                         })
@@ -2115,7 +2137,7 @@ elif menu == "Minha Carteira":
                             q_add = st.number_input("Quantidade comprada", min_value=0.0001, value=10.0 if op["classe"] in ("Ações", "FIIs") else 1.0, key=f"q_rd_{op['ticker']}")
                             p_add = st.number_input("Preço pago (R$)", min_value=0.01, value=float(preco_exibir), key=f"p_rd_{op['ticker']}")
                             if st.button("Confirmar Compra", key=f"btn_rd_{op['ticker']}", type="primary", use_container_width=True):
-                                db["ativos"].append({
+                                somar_ou_adicionar_ativo({
                                     "id": novo_id(), "ticker": op["ticker"], "nome": op["nome"], "classe": op["classe"],
                                     "qtd": float(q_add), "pm": float(p_add), "preco_atual": float(preco_exibir),
                                     "data_compra": date.today().strftime("%Y-%m-%d")
@@ -2196,7 +2218,7 @@ elif menu == "Minha Carteira":
                             st.error("Informe o total pago ou o preço por unidade.")
                         else:
                             live = preco_por_chave("Cripto", tick_c)
-                            db["ativos"].append({
+                            somar_ou_adicionar_ativo({
                                 "id": novo_id(), "ticker": tick_c, "nome": CRIPTO_NOMES.get(tick_c, tick_c),
                                 "classe": "Cripto", "qtd": float(qtd_cripto), "pm": float(pm_c),
                                 "preco_atual": float(live) if live else float(pm_c),
@@ -2223,7 +2245,7 @@ elif menu == "Minha Carteira":
                 if st.form_submit_button("Salvar compra de dólar", use_container_width=True, type="primary"):
                     pm_usd = (float(usd_comprado) * float(cot_compra) + float(taxas_usd)) / float(usd_comprado)
                     live = cotacao_dolar()
-                    db["ativos"].append({
+                    somar_ou_adicionar_ativo({
                         "id": novo_id(), "ticker": "USD", "nome": "Dólar Americano",
                         "classe": "Dólar", "qtd": float(usd_comprado), "pm": float(pm_usd),
                         "preco_atual": float(live["preco"]) if live else float(cot_compra),
