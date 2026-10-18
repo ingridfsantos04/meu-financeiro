@@ -1,8 +1,19 @@
+"""
+Meu Financeiro - painel de gestão financeira pessoal (Streamlit + Supabase).
+
+Organização do arquivo:
+  1. Configuração, constantes e conexão com o banco (Supabase)
+  2. Utilitários (formatação, datas, cotações de mercado)
+  3. Design system (CSS)
+  4. Autenticação (login, sessão persistente por cookie)
+  5. Regras de negócio (cartão, devedores, caixinhas, carteira)
+  6. Barra lateral e navegação
+  7. Páginas (uma função por tela) e despacho de rotas
+"""
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import json
 import os
 import html
@@ -68,9 +79,12 @@ if not SUPABASE_KEY:
     )
     st.stop()
 
-@st.cache_resource
-def iniciar_supabase():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+def iniciar_supabase() -> "Client":
+    """Um cliente por sessão do navegador. Com um cliente global compartilhado, o login de um
+    usuário poderia vazar para outro que estivesse usando o app ao mesmo tempo."""
+    if "_sb_client" not in st.session_state:
+        st.session_state["_sb_client"] = create_client(SUPABASE_URL, SUPABASE_KEY)
+    return st.session_state["_sb_client"]
 
 supabase: Client = iniciar_supabase()
 
@@ -121,7 +135,6 @@ def estrutura_inicial_dados():
 CLASSES_INVEST = ["Ações", "FIIs", "Renda Fixa", "Internacional", "Cripto", "Dólar"]
 CLASSES_BOLSA_FORM = ["Ações", "FIIs", "Renda Fixa", "Internacional"]
 CLASSES_ALT = ["Cripto", "Dólar"]
-CLASSES_TODAS = ["Ações", "FIIs", "Renda Fixa", "Caixinhas", "Internacional", "Cripto", "Dólar"]
 CORES_CLASSE = {
     "Ações": "#2563EB",
     "FIIs": "#7C3AED",
@@ -140,6 +153,10 @@ CRIPTO_NOMES = {
 
 MESES_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+# Regras do cartão de crédito
+DIA_FECHAMENTO_CARTAO = 15   # compras a partir deste dia entram na fatura do mês seguinte
+DIA_VENCIMENTO_CARTAO = 22   # vencimento da fatura
+
 DIAS_PT = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
 
 LISTA_CARTOES = ["Nubank", "C6 Bank", "Banco Inter", "Itaú", "Bradesco", "Santander", "Outro"]
@@ -1233,7 +1250,7 @@ def inicio_fatura_compra(c):
         dt_compra = datetime.strptime(c["data_compra"], "%Y-%m-%d").date()
     except Exception:
         dt_compra = hoje_br()
-    m = dt_compra.month + (1 if dt_compra.day >= 15 else 0)
+    m = dt_compra.month + (1 if dt_compra.day >= DIA_FECHAMENTO_CARTAO else 0)
     a = dt_compra.year + (1 if m > 12 else 0)
     m = 1 if m > 12 else m
     return a, m
@@ -1312,7 +1329,6 @@ def calcular_atraso_real_divida(dev):
     """O atraso é calculado pela DATA DE VENCIMENTO de cada parcela:
     parcela vencida (data < hoje) e ainda não coberta pelos recebimentos = em atraso."""
     v_tot = float(dev.get("valor_total", 0.0))
-    parc_tot = max(int(dev.get("parcelas_total", 1)), 1)
     v_parc = _parcela_divida(dev)
     tot_pago = float(dev.get("total_pago_reais", 0.0))
     falta_tot = max(0.0, v_tot - tot_pago)
@@ -1325,8 +1341,12 @@ def calcular_atraso_real_divida(dev):
 
     parcelas_cobertas = int((tot_pago + 0.05) // v_parc) if v_parc > 0 else 0
     n_atrasadas = max(0, n_vencidas - parcelas_cobertas) if val_atraso > 0 else 0
-    idx_prox = min(parcelas_cobertas, parc_tot - 1)
-    proximo_venc = venc[idx_prox] if venc else None
+    # Próximo vencimento = próxima data do calendário (>= hoje). Se há atraso, mostra a parcela vencida mais antiga em aberto.
+    futuras = [d for d in venc if d >= hoje_atual]
+    if val_atraso > 0 and n_vencidas > 0:
+        proximo_venc = venc[min(parcelas_cobertas, n_vencidas - 1)]
+    else:
+        proximo_venc = futuras[0] if futuras else None
 
     is_quitado = falta_tot <= 0.05
 
@@ -1339,7 +1359,7 @@ def calcular_atraso_real_divida(dev):
         status_d = "atrasado"
         dias_atraso = max(0, (hoje_atual - proximo_venc).days) if proximo_venc else 0
         badge = f"<span class='badge-status status-atraso'>Em atraso · {fmt_moeda(val_atraso)}</span>"
-        msg_detalhe = f"{n_atrasadas} parcela(s) vencida(s) · venceu em {proximo_venc.strftime('%d/%m/%Y')} ({dias_atraso} dia(s))"
+        msg_detalhe = f"{n_atrasadas} parcela(s) vencida(s) · venceu em {proximo_venc.strftime('%d/%m/%Y')} ({dias_atraso} dia(s))" if proximo_venc else f"{n_atrasadas} parcela(s) vencida(s)"
     else:
         status_d = "em_dia"
         badge = "<span class='badge-status status-alta'>Em dia</span>"
@@ -1718,7 +1738,8 @@ def listar_ativos(df_view):
 # ==============================================================================
 # TELA: VISÃO GERAL
 # ==============================================================================
-if menu == "Visão Geral":
+def pagina_visao_geral() -> None:
+    """Tela: Visão Geral."""
     hero(f"Visão Geral · {NOME_USUARIO_LOGADO}", "Painel consolidado e interativo: clique em “Ver detalhes” em cada card para ver exatamente o que compõe cada número.")
 
     hoje = hoje_br()
@@ -1740,8 +1761,8 @@ if menu == "Visão Geral":
     prov_mes_lista = [p for p in proventos if p.get("status") == "recebido" and p["data"].startswith(chave_mes_vg)]
     proventos_mes = sum(float(p["valor"]) for p in prov_mes_lista)
 
-    recebido_devedores_mes = recebido_devedores_no_mes(chave_mes_vg)
-    total_entradas_mes = entradas_conta_mes + proventos_mes + recebido_devedores_mes
+    # Recebimentos de devedores NÃO entram na soma: já são lançados como entrada (PIX) em Conta & Débito.
+    total_entradas_mes = entradas_conta_mes + proventos_mes
 
     contas_mes = [c for c in db.get("contas_fixas", []) if c["mes_ano"] == chave_mes_vg]
     total_contas_fixas_mes = sum(float(c["valor"]) for c in contas_mes)
@@ -1791,16 +1812,10 @@ if menu == "Visão Geral":
                 st.markdown(f"**Entradas em {nome_mes_vg}/{ano_vg}**")
                 st.write(f"• Conta / Débito: **{fmt_moeda(entradas_conta_mes)}**")
                 st.write(f"• Proventos/Dividendos: **{fmt_moeda(proventos_mes)}**")
-                st.write(f"• Devedores recebido: **{fmt_moeda(recebido_devedores_mes)}**")
                 st.divider()
                 st.caption("Extrato das entradas:")
                 for te in trans_entradas_mes:
                     st.text(f"• {te['data'][8:10]}/{te['data'][5:7]}: {te['descricao']} (+{fmt_moeda(te['valor'])})")
-                _rec_dev = recebimentos_devedores_mes(chave_mes_vg)
-                if _rec_dev:
-                    st.caption("Recebimentos de devedores:")
-                    for rd in _rec_dev:
-                        st.text(f"• {rd['data'][8:10]}/{rd['data'][5:7]}: {rd['nome']} - {rd['descricao']} (+{fmt_moeda(rd['valor'])})")
 
     with col_c2:
         with st.container(border=True):
@@ -1863,7 +1878,7 @@ if menu == "Visão Geral":
         return float(df_ativos[df_ativos["classe"] == cl]["valor_atual"].sum()) if not df_ativos.empty else 0.0
 
     pat_acoes, pat_fiis, pat_rf = _pat("Ações"), _pat("FIIs"), _pat("Renda Fixa")
-    pat_cripto, pat_inter, pat_dolar_brl = _pat("Cripto"), _pat("Internacional"), _pat("Dólar")
+    pat_cripto, pat_inter = _pat("Cripto"), _pat("Internacional")
 
     df_dolar = df_ativos[df_ativos["classe"] == "Dólar"]
     qtd_total_dolar = float(df_dolar["qtd"].sum()) if not df_dolar.empty else 0.0
@@ -1955,7 +1970,7 @@ if menu == "Visão Geral":
     else:
         vazio("Cadastre ativos na aba “Minha Carteira” para ver o desempenho dos seus investimentos.", "📈")
 
-    secao("Devedores", "Valores que terceiros ainda te devem. Atraso calculado pela data de vencimento de cada parcela.")
+    secao("Devedores", "Informativo: os recebimentos de devedores não entram na soma do mês, pois já são lançados como entrada (PIX).")
     devedores = db.get("devedores", [])
     _infos_dev = [calcular_atraso_real_divida(d) for d in devedores]
     total_geral_receber = sum(i["falta_total"] for i in _infos_dev)
@@ -1966,7 +1981,6 @@ if menu == "Visão Geral":
     <div class="stats">
       <div class="stat"><div class="stat-n" style="color:#0B1220">{fmt_moeda(total_geral_receber)}</div><div class="stat-l">Total a receber ({len(set(d['nome'].strip().title() for d in devedores))} pessoa(s))</div></div>
       <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(previsto_dev_mes)}</div><div class="stat-l">Parcelas que vencem em {nome_mes_vg}</div></div>
-      <div class="stat"><div class="stat-n" style="color:#15803D">{fmt_moeda(recebido_devedores_mes)}</div><div class="stat-l">Recebido em {nome_mes_vg}</div></div>
       <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_atraso_devedores)}</div><div class="stat-l">Em atraso</div></div>
     </div>
     """)
@@ -1974,7 +1988,8 @@ if menu == "Visão Geral":
 # ==============================================================================
 # TELA: RESUMO & DIAGNÓSTICO
 # ==============================================================================
-elif menu == "Resumo & Diagnóstico":
+def pagina_resumo_diagnostico() -> None:
+    """Tela: Resumo & Diagnóstico."""
     hero("Resumo & Diagnóstico Financeiro", "Tenha a visão exata do seu dinheiro, do que pode gastar, e dispare o relatório direto para seu e-mail.")
 
     hoje = hoje_br()
@@ -1982,7 +1997,6 @@ elif menu == "Resumo & Diagnóstico":
     m_diag = c1.selectbox("Mês do Diagnóstico", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="diag_mes")
     a_diag = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="diag_ano")
     ch_diag = f"{a_diag:04d}-{m_diag:02d}"
-    nome_m_diag = MESES_PT[m_diag - 1]
 
     trans = db.get("transacoes_debito", [])
     ent_m = sum(float(t["valor"]) for t in trans if t["tipo"] == "Entrada (+)" and t["data"].startswith(ch_diag))
@@ -2026,8 +2040,9 @@ elif menu == "Resumo & Diagnóstico":
 # ==============================================================================
 # TELA: CONTAS FIXAS
 # ==============================================================================
-elif menu == "Contas Fixas":
-    hero("Contas Fixas", "Cadastre, edite e acompanhe os vencimentos do mês. A fatura do cartão entra automaticamente no dia 22.")
+def pagina_contas_fixas() -> None:
+    """Tela: Contas Fixas."""
+    hero("Contas Fixas", f"Cadastre, edite e acompanhe os vencimentos do mês. A fatura do cartão entra automaticamente no dia {DIA_VENCIMENTO_CARTAO}.")
 
     hoje = hoje_br()
 
@@ -2082,7 +2097,7 @@ elif menu == "Contas Fixas":
     pendente_contas = total_mes_contas - pago_contas
 
     contas_atrasadas = [c for c in contas_do_mes if c.get("status") != "pago" and date(ano_contas, mes_contas_idx, int(c["dia_vencimento"])) < hoje]
-    if (not cartao_pago_neste_mes) and date(ano_contas, mes_contas_idx, 22) < hoje and fatura_cartao_dinamica > 0:
+    if (not cartao_pago_neste_mes) and date(ano_contas, mes_contas_idx, DIA_VENCIMENTO_CARTAO) < hoje and fatura_cartao_dinamica > 0:
         qtd_atrasadas = len(contas_atrasadas) + 1
         tot_atrasado = sum(float(c["valor"]) for c in contas_atrasadas) + fatura_cartao_dinamica
     else:
@@ -2110,9 +2125,9 @@ elif menu == "Contas Fixas":
         mapa_dias.setdefault(d, []).append(c)
 
     if fatura_cartao_dinamica > 0:
-        mapa_dias.setdefault(22, []).append({
+        mapa_dias.setdefault(DIA_VENCIMENTO_CARTAO, []).append({
             "id": "fatura_cartao_auto", "nome": "💳 Fatura Cartão", "categoria": "Cartão de Crédito",
-            "valor": fatura_cartao_dinamica, "status": "pago" if cartao_pago_neste_mes else "pendente", "dia_vencimento": 22
+            "valor": fatura_cartao_dinamica, "status": "pago" if cartao_pago_neste_mes else "pendente", "dia_vencimento": DIA_VENCIMENTO_CARTAO
         })
 
     dias_semana_lbl = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
@@ -2159,11 +2174,11 @@ elif menu == "Contas Fixas":
     secao(f"Contas de {nome_mes_contas}/{ano_contas}")
 
     if fatura_cartao_dinamica > 0:
-        dt_venc_c = date(ano_contas, mes_contas_idx, 22)
+        dt_venc_c = date(ano_contas, mes_contas_idx, DIA_VENCIMENTO_CARTAO)
         atrasada_c = (not cartao_pago_neste_mes) and (dt_venc_c < hoje)
         with st.container(border=True):
             c_d, c_i, c_v, c_ac, _ = st.columns([1.1, 2.3, 1.3, 1.4, 0.4], vertical_alignment="center")
-            c_d.markdown(f"<div class='cell-big'>Dia 22</div><div class='cell-l'>{dt_venc_c.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
+            c_d.markdown(f"<div class='cell-big'>Dia {DIA_VENCIMENTO_CARTAO}</div><div class='cell-l'>{dt_venc_c.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
             c_i.markdown(f"<div class='asset-tk'>💳 Fatura do cartão de crédito <span class='chip chip-cartao'>Automático</span></div><div class='asset-sub'>Valor calculado a partir das compras de {nome_mes_contas}</div>", unsafe_allow_html=True)
             cor_v_c = "#15803D" if cartao_pago_neste_mes else ("#B91C1C" if atrasada_c else "#0F766E")
             st_badge = "<span class='badge-status status-alta'>Fatura paga</span>" if cartao_pago_neste_mes else ("<span class='badge-status status-atraso'>Fatura atrasada</span>" if atrasada_c else "<span class='badge-status status-neutro'>A vencer</span>")
@@ -2268,7 +2283,8 @@ elif menu == "Contas Fixas":
 # ==============================================================================
 # TELA: MINHA CARTEIRA
 # ==============================================================================
-elif menu == "Minha Carteira":
+def pagina_carteira() -> None:
+    """Tela: Minha Carteira."""
     hero("Minha Carteira", "Ações, FIIs, Cripto, Dólar e Caixinhas — com cotações em tempo real e Radar de Aportes da Bolsa.")
 
     aba_invest, aba_radar, aba_alt, aba_caixinhas, aba_vendas = st.tabs([
@@ -2687,7 +2703,8 @@ elif menu == "Minha Carteira":
 # ==============================================================================
 # TELA: AGENDA DE DIVIDENDOS
 # ==============================================================================
-elif menu == "Dividendos":
+def pagina_dividendos() -> None:
+    """Tela: Dividendos."""
     hero("Agenda de Dividendos & Proventos", "Controle de proventos com cálculo automático e confirmação de recebimento.")
 
     hoje = hoje_br()
@@ -2766,8 +2783,9 @@ elif menu == "Dividendos":
 # ==============================================================================
 # TELA: CARTÃO DE CRÉDITO
 # ==============================================================================
-elif menu == "Cartão de Crédito":
-    hero("Faturas & Cartão de Crédito", "Fechamento dia 15 e vencimento dia 22. Clique no mês desejado para ver a fatura na hora.")
+def pagina_cartao() -> None:
+    """Tela: Cartão de Crédito."""
+    hero("Faturas & Cartão de Crédito", f"Fechamento dia {DIA_FECHAMENTO_CARTAO} e vencimento dia {DIA_VENCIMENTO_CARTAO}. Selecione o mês para ver a fatura.")
 
     hoje = hoje_br()
 
@@ -2815,7 +2833,7 @@ elif menu == "Cartão de Crédito":
             f_c8, f_c9, f_c10 = st.columns([1.2, 1.4, 1.4])
             dt_compra = f_c8.date_input("Data da Compra", value=hoje_br(), format="DD/MM/YYYY")
 
-            mes_sug = dt_compra.month + (1 if dt_compra.day >= 15 else 0)
+            mes_sug = dt_compra.month + (1 if dt_compra.day >= DIA_FECHAMENTO_CARTAO else 0)
             ano_sug = dt_compra.year + (1 if mes_sug > 12 else 0)
             mes_sug = 1 if mes_sug > 12 else mes_sug
 
@@ -2973,7 +2991,8 @@ elif menu == "Cartão de Crédito":
 # ==============================================================================
 # TELA: CONTA & DÉBITO
 # ==============================================================================
-elif menu == "Conta & Débito":
+def pagina_conta_debito() -> None:
+    """Tela: Conta & Débito."""
     hero("Extrato de Conta & Débito", "Controle tudo o que entra e sai da sua conta à vista: salário, vale, PIX e débito.")
 
     hoje = hoje_br()
@@ -3061,7 +3080,8 @@ elif menu == "Conta & Débito":
 # ==============================================================================
 # TELA: DEVEDORES
 # ==============================================================================
-elif menu == "Devedores":
+def pagina_devedores() -> None:
+    """Tela: Devedores."""
     hero("Devedores", "Valores a receber, vencimentos de cada parcela e recebimentos registrados. O atraso é calculado pela data de vencimento.")
 
     hoje = hoje_br()
@@ -3195,7 +3215,7 @@ elif menu == "Devedores":
                             <div>
                               <div class="cell-l">Próxima parcela</div>
                               <div class="cell-big">{fmt_moeda(min(info['v_parc'], info['falta_total']))}</div>
-                              <div class="cell-l" style="margin-top:3px">Vence em <b style="color:#0B1220">{info['proximo_venc'].strftime('%d/%m/%Y')}</b></div>
+                              <div class="cell-l" style="margin-top:3px">Vence em <b style="color:#0B1220">{info['proximo_venc'].strftime('%d/%m/%Y') if info['proximo_venc'] else '—'}</b></div>
                             </div>
                             """)
 
@@ -3302,7 +3322,8 @@ elif menu == "Devedores":
 # ==============================================================================
 # TELA: METAS
 # ==============================================================================
-elif menu == "Metas":
+def pagina_metas() -> None:
+    """Tela: Metas."""
     meta_p = float(db.get("metas", {}).get("patrimonio", 100000.0))
     meta_r = float(db.get("metas", {}).get("renda_mensal", 1000.0))
     hero("Metas de Independência Financeira", "Defina seus objetivos patrimoniais e de renda passiva.")
@@ -3347,6 +3368,22 @@ elif menu == "Metas":
       </div>
     </div>
     """)
+
+# ==============================================================================
+# ROTAS: nome do menu -> função da página
+# ==============================================================================
+PAGINAS = {
+    "Visão Geral": pagina_visao_geral,
+    "Resumo & Diagnóstico": pagina_resumo_diagnostico,
+    "Contas Fixas": pagina_contas_fixas,
+    "Minha Carteira": pagina_carteira,
+    "Dividendos": pagina_dividendos,
+    "Cartão de Crédito": pagina_cartao,
+    "Conta & Débito": pagina_conta_debito,
+    "Devedores": pagina_devedores,
+    "Metas": pagina_metas,
+}
+PAGINAS[menu]()
 
 # ==============================================================================
 # RODAPÉ INSTITUCIONAL
