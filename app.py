@@ -2468,6 +2468,14 @@ elif menu == "Cartão de Crédito":
     if "fatura_ano_num" not in st.session_state:
         st.session_state["fatura_ano_num"] = hoje.year
 
+    def _ir_para_fatura(mes_k, ano_k):
+        # Atualiza direto as chaves dos seletores (antes de serem desenhados),
+        # senão o selectbox ignora o novo valor e volta para o mês antigo.
+        st.session_state["sel_mfat"] = mes_k
+        st.session_state["sel_afat"] = ano_k
+        st.session_state["fatura_mes_num"] = mes_k
+        st.session_state["fatura_ano_num"] = ano_k
+
     c_f1, c_f2 = st.columns([2.5, 1])
     with c_f1:
         mes_fat_idx = st.selectbox("Mês da fatura", range(1, 13), index=st.session_state["fatura_mes_num"] - 1, format_func=lambda x: MESES_PT[x-1], key="sel_mfat")
@@ -2598,15 +2606,21 @@ elif menu == "Cartão de Crédito":
         st.plotly_chart(fig_faturas, use_container_width=True, config=CONFIG_PLOTLY)
 
         md("<div style='font-weight:700;color:#334155;margin:10px 0 6px;font-size:.88rem'>👇 Clique no mês para abrir a fatura na hora:</div>")
-        cols_botoes = st.columns(min(max(len(chaves_ordenadas), 1), 6))
-        for col_btn, k_chave in zip(cols_botoes, chaves_ordenadas):
-            ano_k = int(k_chave.split("-")[0])
-            mes_k = int(k_chave.split("-")[1])
-            rotulo = f"{MESES_PT[mes_k - 1][:3]}/{str(ano_k)[2:]}\n{fmt_moeda(projecao_meses[k_chave])}"
-            if col_btn.button(rotulo, key=f"btn_p_{k_chave}", use_container_width=True):
-                st.session_state["fatura_mes_num"] = mes_k
-                st.session_state["fatura_ano_num"] = ano_k
-                st.rerun()
+        chaves_botoes = [k for k in sorted(projecao_meses.keys())
+                         if k >= fatura_atual_real_chave and int(k.split("-")[0]) in anos_opcoes][:12]
+        for i in range(0, len(chaves_botoes), 6):
+            linha = chaves_botoes[i:i + 6]
+            cols_botoes = st.columns(6)
+            for col_btn, k_chave in zip(cols_botoes, linha):
+                ano_k = int(k_chave.split("-")[0])
+                mes_k = int(k_chave.split("-")[1])
+                rotulo = f"{MESES_PT[mes_k - 1][:3]}/{str(ano_k)[2:]}\n{fmt_moeda(projecao_meses[k_chave])}"
+                eh_sel = (mes_k == mes_sel and ano_k == ano_sel)
+                col_btn.button(
+                    rotulo, key=f"btn_p_{k_chave}", use_container_width=True,
+                    type="primary" if eh_sel else "secondary",
+                    on_click=_ir_para_fatura, args=(mes_k, ano_k)
+                )
 
     secao(f"Compras e parcelas na fatura de {mes_fat_nome}/{ano_sel}")
     if not compras_do_mes:
