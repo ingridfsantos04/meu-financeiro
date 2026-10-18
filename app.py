@@ -10,9 +10,6 @@ import time
 import urllib.request
 import urllib.parse
 import calendar
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date
 
@@ -1726,94 +1723,6 @@ elif menu == "Resumo & Diagnóstico":
     secao("Onde posso melhorar financeiramente?")
     for d in dicas:
         md(f"<div class='tip'>{d}</div>")
-
-    secao("Enviar relatório completo para meu e-mail", "O relatório chega formatado e pronto para consultar de qualquer lugar.")
-
-    corpo_html_email = f"""
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"></head>
-    <body style="font-family:'Segoe UI',sans-serif;background-color:#F4F6F9;padding:24px;color:#0F172A;">
-      <div style="max-width:620px;margin:auto;background:#FFFFFF;border-radius:14px;padding:28px;border:1px solid #E2E8F0;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
-        <div style="border-bottom:2px solid #0F766E;padding-bottom:12px;margin-bottom:20px;">
-          <h2 style="color:#0F766E;margin:0;">Meu Financeiro · {html.escape(NOME_USUARIO_LOGADO)}</h2>
-          <p style="color:#64748B;font-size:14px;margin:4px 0 0;">Relatório Executivo Mensal — {nome_m_diag} de {a_diag}</p>
-        </div>
-
-        <p style="font-size:15px;line-height:1.6;">Olá, <b>{html.escape(NOME_USUARIO_LOGADO)}</b>! Aqui está o diagnóstico completo do seu financeiro para você acompanhar de qualquer lugar:</p>
-
-        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px;margin:18px 0;">
-          <h4 style="margin:0 0 10px;color:#0F172A;">💰 Quanto Dinheiro Você Tem Hoje</h4>
-          <p style="margin:4px 0;font-size:14px;">• <b>Patrimônio Total:</b> {fmt_moeda(patrimonio_geral)}</p>
-          <p style="margin:4px 0;font-size:14px;">• <b>Guardado nas Caixinhas:</b> {fmt_moeda(tot_caixas)}</p>
-          <p style="margin:4px 0;font-size:14px;">• <b>Investido na Bolsa / Cripto / Dólar:</b> {fmt_moeda(tot_invest)}</p>
-        </div>
-
-        <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:16px;margin:18px 0;">
-          <h4 style="margin:0 0 10px;color:#991B1B;">🛡️ O Que Você NÃO DEVE Gastar ({nome_m_diag})</h4>
-          <p style="margin:4px 0;font-size:14px;color:#7F1D1D;">• <b>Fatura do Cartão de Crédito:</b> {fmt_moeda(fat_card)}</p>
-          <p style="margin:4px 0;font-size:14px;color:#7F1D1D;">• <b>Contas Fixas a Pagar:</b> {fmt_moeda(tot_cfix)}</p>
-          <p style="margin:6px 0 0;font-size:15px;font-weight:bold;color:#991B1B;">Total Blindado para Contas: {fmt_moeda(nao_deve_gastar)}</p>
-        </div>
-
-        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:16px;margin:18px 0;">
-          <h4 style="margin:0 0 10px;color:#166534;">🟢 O Que Você PODE Gastar com Segurança</h4>
-          <p style="margin:4px 0;font-size:14px;color:#14532D;">• <b>Entradas no Mês:</b> {fmt_moeda(ent_m)}</p>
-          <p style="margin:6px 0 0;font-size:16px;font-weight:bold;color:#15803D;">Saldo Livre Seguro: {fmt_moeda(pode_gastar_seguro)}</p>
-        </div>
-
-        <div style="margin-top:20px;">
-          <h4 style="margin:0 0 8px;color:#0F172A;">💡 Onde Melhorar Financeiramente:</h4>
-          {"".join([f"<p style='font-size:13px;line-height:1.5;margin:4px 0;'>• {d.replace('<b>','').replace('</b>','')}</p>" for d in dicas])}
-        </div>
-
-        <hr style="border:none;border-top:1px solid #E2E8F0;margin:24px 0 16px;">
-        <p style="font-size:12px;color:#94A3B8;text-align:center;margin:0;">Gerado automaticamente pelo seu painel financeiro particular.</p>
-      </div>
-    </body>
-    </html>
-    """
-
-    col_btn1, col_btn2 = st.columns([1.2, 1])
-
-    with col_btn1:
-        smtp_cfg = db.get("config", {})
-        remetente_salvo = smtp_cfg.get("smtp_email", EMAIL_USUARIO_LOGADO) or EMAIL_USUARIO_LOGADO
-        senha_app_salva = smtp_cfg.get("smtp_pass", "")
-
-        if st.button("Enviar e-mail automático agora", type="primary", use_container_width=True):
-            if not senha_app_salva:
-                st.error("Para envio automático com 1 clique, insira sua Senha de App do Gmail no campo abaixo uma única vez.")
-            else:
-                try:
-                    msg = MIMEMultipart("alternative")
-                    msg["Subject"] = f"📊 Meu Resumo Financeiro - {nome_m_diag}/{a_diag}"
-                    msg["From"] = remetente_salvo
-                    msg["To"] = EMAIL_USUARIO_LOGADO
-                    msg.attach(MIMEText(corpo_html_email, "html"))
-
-                    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                        server.login(remetente_salvo, senha_app_salva)
-                        server.sendmail(remetente_salvo, EMAIL_USUARIO_LOGADO, msg.as_string())
-
-                    st.toast(f"E-mail enviado diretamente para {EMAIL_USUARIO_LOGADO}!", icon="✅")
-                    st.success(f"Relatório enviado com sucesso diretamente para **{EMAIL_USUARIO_LOGADO}**!")
-                except Exception:
-                    st.error("Não foi possível enviar o e-mail. Confira a Senha de App do Gmail e tente novamente.")
-
-        with st.expander("Configurar senha de envio automático do Gmail (apenas 1 vez)"):
-            st.caption("Gere uma 'Senha de App' na sua conta Google (Segurança > Verificação em duas etapas > Senhas de App) e cole abaixo:")
-            pass_input = st.text_input("Senha de App do Gmail (16 letras):", value=senha_app_salva, type="password")
-            if st.button("Salvar senha"):
-                db.setdefault("config", {})["smtp_pass"] = pass_input.strip()
-                salvar_dados(db)
-                st.toast("Senha de envio salva!", icon="✅")
-                st.rerun()
-
-    with col_btn2:
-        corpo_txt_simples = f"Resumo {nome_m_diag}/{a_diag}: Patrimonio {fmt_moeda(patrimonio_geral)} | Nao gastar: {fmt_moeda(nao_deve_gastar)} | Pode gastar: {fmt_moeda(pode_gastar_seguro)}"
-        gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={EMAIL_USUARIO_LOGADO}&su={urllib.parse.quote(f'Meu Resumo Financeiro - {nome_m_diag}/{a_diag}')}&body={urllib.parse.quote(corpo_txt_simples)}"
-        st.link_button("Abrir no Gmail Web (alternativa)", gmail_url, use_container_width=True)
 
 # ==============================================================================
 # TELA: CONTAS FIXAS & CALENDÁRIO
