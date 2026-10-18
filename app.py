@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import json
 import os
 import html
+import math
 import time
 import urllib.request
 import urllib.parse
@@ -151,6 +152,13 @@ LISTA_CATEGORIAS_CONTAS = [
     "Educação / Cursos", "Saúde / Plano", "Assinaturas / Streaming", "Transporte / Garagem", "Outros"
 ]
 
+# Chaves dos seletores de mês/ano: são reiniciadas automaticamente quando o mês vira
+CHAVES_SELETORES_MES = [
+    "vg_mes", "vg_ano", "diag_mes", "diag_ano", "sel_m_contas", "sel_a_contas",
+    "m_prov", "a_prov", "deb_mes", "deb_ano", "sel_mfat", "sel_afat",
+    "fatura_mes_num", "fatura_ano_num",
+]
+
 # --- Visual dos gráficos (Plotly) ---
 LAYOUT_GRAFICO = {
     "margin": dict(l=10, r=10, t=20, b=10),
@@ -170,7 +178,7 @@ def md(texto):
 
 def hero(titulo, sub):
     d = agora_br()
-    data_txt = f"{DIAS_PT[d.weekday()]}, {d.day} de {MESES_PT[d.month-1].lower()}"
+    data_txt = f"{DIAS_PT[d.weekday()]}, {d.day} de {MESES_PT[d.month-1].lower()} de {d.year}"
     md(f"""<div class="hero-box">
       <div class="hero-text"><div class="hero-eyebrow">{APP_NOME}</div><div class="hero-title">{titulo}</div><div class="hero-sub">{sub}</div></div>
       <div class="hero-date">{data_txt}</div>
@@ -180,8 +188,8 @@ def secao(titulo, sub=None):
     s = f"<div class='sec-sub'>{sub}</div>" if sub else ""
     md(f"<div class='sec'><div class='sec-t'>{titulo}</div>{s}</div>")
 
-def vazio(msg, icone="📭"):
-    md(f"<div class='empty'><div class='empty-i'>{icone}</div>{msg}</div>")
+def vazio(msg, icone=None):
+    md(f"<div class='empty'>{msg}</div>")
 
 def kpi(valor, label, cor="#0B1220", tamanho="1.55rem"):
     return f"<div class='kpi'><div class='kpi-l'>{label}</div><div class='kpi-n' style='color:{cor};font-size:{tamanho}'>{valor}</div></div>"
@@ -238,6 +246,27 @@ def agora_br():
     except Exception:
         pass
     return datetime.now()
+
+def hoje_br():
+    """Data de hoje no fuso de Brasília (o servidor da nuvem roda em UTC,
+    então date.today() poderia estar adiantado ou atrasado em relação ao Brasil)."""
+    return agora_br().date()
+
+def fmt_data(d):
+    return d.strftime("%d/%m/%Y")
+
+def parse_data(s, default=None):
+    try:
+        return datetime.strptime(str(s)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return default if default is not None else hoje_br()
+
+def somar_meses(d, n):
+    """Soma n meses a uma data mantendo o dia (ajusta para o último dia do mês quando preciso)."""
+    m = d.month - 1 + n
+    a = d.year + m // 12
+    m = m % 12 + 1
+    return date(a, m, min(d.day, calendar.monthrange(a, m)[1]))
 
 def chip_classe(classe):
     mapa = {
@@ -425,7 +454,7 @@ st.markdown("""
   --ink-2: #334155;
   --ink-3: #64748B;
   --ink-4: #94A3B8;
-  --line: #E5E9F0;
+  --line: #E3E8EF;
   --line-2: #EEF1F6;
   --brand: #0F766E;
   --brand-2: #14B8A6;
@@ -434,20 +463,21 @@ st.markdown("""
   --navy-2: #0F2238;
   --pos: #047857;
   --neg: #B91C1C;
+  --warn: #B45309;
   --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 22px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 18px;
   --sh-xs: 0 1px 2px rgba(11,18,32,.04);
-  --sh-sm: 0 1px 3px rgba(11,18,32,.06), 0 1px 2px rgba(11,18,32,.04);
-  --sh-md: 0 10px 28px -10px rgba(11,18,32,.16);
+  --sh-sm: 0 1px 2px rgba(11,18,32,.05), 0 1px 3px rgba(11,18,32,.04);
+  --sh-md: 0 8px 24px -12px rgba(11,18,32,.18);
 }
 
 /* ---------- Base ---------- */
 html, body, .stApp, .stMarkdown, p, label, button, input, textarea, select, h1, h2, h3, h4 {
   font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif !important;
 }
-.stApp { background: var(--bg) !important; color: var(--ink) !important; }
+.stApp { background: var(--bg) !important; color: var(--ink) !important; font-feature-settings: "cv11", "ss01"; }
 .block-container { max-width: 1320px !important; padding: 1.6rem 2.2rem 5rem !important; }
 h1, h2, h3, h4 { color: var(--ink) !important; letter-spacing: -.02em; font-weight: 800 !important; }
 ::selection { background: rgba(20,184,166,.25); }
@@ -488,74 +518,71 @@ h1, h2, h3, h4 { color: var(--ink) !important; letter-spacing: -.02em; font-weig
 }
 [data-testid="stSidebarCollapseButton"] svg { fill: #FFFFFF !important; color: #FFFFFF !important; }
 
-/* ---------- Hero ---------- */
+/* ---------- Cabeçalho de página ---------- */
 .hero-box {
   position: relative; overflow: hidden;
-  background: linear-gradient(120deg, #0A1628 0%, #0E3447 52%, #0F766E 130%);
-  border-radius: var(--r-xl); padding: 1.7rem 2rem; margin-bottom: 1.6rem;
+  background: linear-gradient(115deg, #0A1628 0%, #0D2F45 58%, #0F766E 150%);
+  border-radius: var(--r-xl); padding: 1.45rem 1.8rem; margin-bottom: 1.5rem;
   display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 14px;
   box-shadow: var(--sh-md);
 }
 .hero-box::before {
-  content: ""; position: absolute; right: -80px; top: -120px; width: 340px; height: 340px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(20,184,166,.35), rgba(20,184,166,0) 70%);
-}
-.hero-box::after {
-  content: ""; position: absolute; left: 38%; bottom: -160px; width: 300px; height: 300px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(56,189,248,.16), rgba(56,189,248,0) 70%);
+  content: ""; position: absolute; right: -80px; top: -120px; width: 320px; height: 320px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(20,184,166,.30), rgba(20,184,166,0) 70%);
 }
 .hero-text { position: relative; z-index: 1; }
-.hero-eyebrow { font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #5EEAD4; margin-bottom: .45rem; }
-.hero-title { font-size: 1.9rem; font-weight: 800; color: #FFFFFF; letter-spacing: -.03em; line-height: 1.15; }
-.hero-sub { color: #AFC0D2; font-size: .93rem; margin-top: .45rem; max-width: 680px; line-height: 1.5; }
+.hero-eyebrow { font-size: .68rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #5EEAD4; margin-bottom: .4rem; }
+.hero-title { font-size: 1.65rem; font-weight: 800; color: #FFFFFF; letter-spacing: -.03em; line-height: 1.15; }
+.hero-sub { color: #AFC0D2; font-size: .88rem; margin-top: .4rem; max-width: 700px; line-height: 1.5; }
 .hero-date {
-  position: relative; z-index: 1; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
-  backdrop-filter: blur(6px); border-radius: 999px; color: #E2E8F0; font-weight: 600; font-size: .8rem;
-  padding: .45rem 1rem; text-transform: capitalize;
+  position: relative; z-index: 1; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px; color: #E2E8F0; font-weight: 600; font-size: .78rem;
+  padding: .42rem .95rem; text-transform: capitalize; font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Títulos de seção ---------- */
-.sec { margin: 1.9rem 0 .9rem; }
-.sec-t { font-size: 1.12rem; font-weight: 800; color: var(--ink); letter-spacing: -.02em; display: flex; align-items: center; gap: 10px; }
-.sec-t::before { content: ""; width: 4px; height: 18px; border-radius: 4px; background: linear-gradient(180deg, var(--brand-2), var(--brand)); }
-.sec-sub { font-size: .85rem; color: var(--ink-3); margin: 4px 0 0 14px; }
+.sec { margin: 1.8rem 0 .85rem; }
+.sec-t { font-size: 1.02rem; font-weight: 800; color: var(--ink); letter-spacing: -.015em; display: flex; align-items: center; gap: 10px; }
+.sec-t::before { content: ""; width: 3px; height: 16px; border-radius: 3px; background: linear-gradient(180deg, var(--brand-2), var(--brand)); }
+.sec-t::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.sec-sub { font-size: .84rem; color: var(--ink-3); margin: 4px 0 0 13px; }
 
 /* ---------- Cards de números ---------- */
-.stats { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important; gap: 16px; margin-bottom: 1.5rem; }
+.stats { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important; gap: 14px; margin-bottom: 1.4rem; }
 .stat {
   position: relative; overflow: hidden; background: var(--paper); border: 1px solid var(--line);
-  border-radius: var(--r-lg); padding: 1.1rem 1.3rem 1.1rem 1.5rem; box-shadow: var(--sh-sm);
-  display: flex; flex-direction: column-reverse; gap: 6px; transition: transform .18s ease, box-shadow .18s ease;
+  border-radius: var(--r-lg); padding: 1rem 1.2rem 1rem 1.4rem; box-shadow: var(--sh-sm);
+  display: flex; flex-direction: column-reverse; gap: 6px; transition: box-shadow .18s ease, border-color .18s ease;
 }
-.stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: linear-gradient(180deg, var(--brand-2), var(--brand)); }
-.stat:hover { transform: translateY(-2px); box-shadow: var(--sh-md); }
-.stat-n { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.025em; line-height: 1.15; }
-.stat-l { color: var(--ink-3); font-size: .8rem; font-weight: 600; }
+.stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--brand-2), var(--brand)); }
+.stat:hover { box-shadow: var(--sh-md); border-color: #D3DAE6; }
+.stat-n { font-size: 1.55rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.025em; line-height: 1.15; }
+.stat-l { color: var(--ink-3); font-size: .76rem; font-weight: 600; letter-spacing: .01em; }
 
 .kpi { padding: 2px 2px 6px; }
-.kpi-l { color: var(--ink-3); font-size: .78rem; font-weight: 600; margin-bottom: 4px; }
+.kpi-l { color: var(--ink-3); font-size: .76rem; font-weight: 600; margin-bottom: 4px; }
 .kpi-n { font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.025em; line-height: 1.15; }
 
 /* ---------- Banner de status do mês ---------- */
 .banner {
-  border: 1px solid var(--line); border-left: 6px solid var(--accent, #10B981); border-radius: var(--r-lg);
-  padding: 1.4rem 1.8rem; margin-bottom: 1.4rem; box-shadow: var(--sh-sm);
+  border: 1px solid var(--line); border-left: 5px solid var(--accent, #10B981); border-radius: var(--r-lg);
+  padding: 1.3rem 1.7rem; margin-bottom: 1.4rem; box-shadow: var(--sh-sm);
   display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;
 }
-.banner-t { font-size: .74rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.banner-d { font-size: .9rem; color: var(--ink-2); margin-top: 6px; line-height: 1.6; }
-.banner-v { font-size: 2.4rem; font-weight: 900; letter-spacing: -.035em; font-variant-numeric: tabular-nums; text-align: right; }
-.banner-vl { font-size: .8rem; font-weight: 700; color: var(--ink-3); text-align: right; }
+.banner-t { font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.banner-d { font-size: .88rem; color: var(--ink-2); margin-top: 6px; line-height: 1.6; }
+.banner-v { font-size: 2.2rem; font-weight: 900; letter-spacing: -.035em; font-variant-numeric: tabular-nums; text-align: right; }
+.banner-vl { font-size: .78rem; font-weight: 700; color: var(--ink-3); text-align: right; }
 
 /* ---------- Cotações ao vivo ---------- */
-.ticker { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 1.4rem; }
-.tk { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: .8rem 1.15rem; min-width: 170px; flex: 1; box-shadow: var(--sh-sm); }
-.tk-n { font-size: .74rem; color: var(--ink-3); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-.tk-v { font-size: 1.3rem; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 3px; letter-spacing: -.02em; }
-.tk-p { font-size: .76rem; font-weight: 700; margin-top: 1px; }
+.ticker { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 1.4rem; }
+.tk { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: .75rem 1.1rem; min-width: 170px; flex: 1; box-shadow: var(--sh-sm); }
+.tk-n { font-size: .7rem; color: var(--ink-3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.tk-v { font-size: 1.25rem; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 3px; letter-spacing: -.02em; }
+.tk-p { font-size: .74rem; font-weight: 700; margin-top: 1px; }
 .tk-up { color: var(--pos); } .tk-down { color: var(--neg); } .tk-flat { color: var(--ink-3); }
-.tk-live { background: linear-gradient(135deg, #0A1628, #0F2238); border-radius: var(--r-lg); padding: .8rem 1.15rem; min-width: 150px; display: flex; flex-direction: column; justify-content: center; color: #fff; }
-.tk-live b { font-size: .78rem; color: #fff; letter-spacing: .04em; }
+.tk-live { background: linear-gradient(135deg, #0A1628, #0F2238); border-radius: var(--r-lg); padding: .75rem 1.1rem; min-width: 150px; display: flex; flex-direction: column; justify-content: center; color: #fff; }
+.tk-live b { font-size: .76rem; color: #fff; letter-spacing: .04em; }
 .tk-live span { color: #94A3B8; font-size: .72rem; margin-top: 2px; }
 .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22C55E; margin-right: 6px; animation: pulse 1.8s infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.7);} 70% { box-shadow: 0 0 0 8px rgba(34,197,94,0);} 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0);} }
@@ -564,9 +591,9 @@ h1, h2, h3, h4 { color: var(--ink) !important; letter-spacing: -.02em; font-weig
 section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0A1628 0%, #0C1D33 100%) !important; border-right: 1px solid rgba(255,255,255,.06); }
 section[data-testid="stSidebar"] * { color: #CBD5E1 !important; }
 section[data-testid="stSidebar"] div[role="radiogroup"] { gap: 2px; }
-section[data-testid="stSidebar"] div[role="radiogroup"] label { border-radius: 10px !important; padding: .62rem .85rem !important; margin: 1px 0 !important; transition: background .15s ease; cursor: pointer; }
+section[data-testid="stSidebar"] div[role="radiogroup"] label { border-radius: 10px !important; padding: .6rem .85rem !important; margin: 1px 0 !important; transition: background .15s ease; cursor: pointer; }
 section[data-testid="stSidebar"] div[role="radiogroup"] label:hover { background: rgba(255,255,255,.06) !important; }
-section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) { background: linear-gradient(90deg, rgba(20,184,166,.22), rgba(20,184,166,.06)) !important; box-shadow: inset 3px 0 0 #14B8A6; }
+section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) { background: linear-gradient(90deg, rgba(20,184,166,.22), rgba(20,184,166,.05)) !important; box-shadow: inset 3px 0 0 #14B8A6; }
 section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p { color: #FFFFFF !important; font-weight: 700 !important; }
 section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child { display: none !important; }
 section[data-testid="stSidebar"] button { background: linear-gradient(135deg, #14B8A6, #0F9488) !important; border-radius: 10px !important; border: none !important; box-shadow: 0 4px 14px rgba(20,184,166,.3) !important; }
@@ -590,16 +617,18 @@ section[data-testid="stSidebar"] input::placeholder { color: #8FA3BC !important;
 section[data-testid="stSidebar"] [data-baseweb="radio"] > div { background-color: transparent !important; border-color: #5F7391 !important; }
 section[data-testid="stSidebar"] [data-baseweb="radio"]:has(input:checked) > div { border-color: #14B8A6 !important; }
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"], section[data-testid="stSidebar"] small { color: #94A3B8 !important; }
-.brand { display: flex; align-items: center; gap: 12px; padding: .2rem 0 1.2rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,.09); }
+.brand { display: flex; align-items: center; gap: 12px; padding: .2rem 0 1.1rem; margin-bottom: .9rem; border-bottom: 1px solid rgba(255,255,255,.09); }
 .brand-mark { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #14B8A6, #0F766E); display: grid; place-items: center; font-weight: 800; color: #fff !important; font-size: .95rem; box-shadow: 0 6px 16px rgba(20,184,166,.35); flex-shrink: 0; }
 .brand-name { font-size: 1rem; font-weight: 700; color: #fff !important; line-height: 1.2; }
 .brand-sub { font-size: .74rem; color: #7C8FA6 !important; }
-.side-label { font-size: .68rem; color: #5F7391 !important; margin: 1.3rem 0 .4rem; text-transform: uppercase; font-weight: 700; letter-spacing: .12em; }
+.side-label { font-size: .66rem; color: #5F7391 !important; margin: 1.3rem 0 .4rem; text-transform: uppercase; font-weight: 700; letter-spacing: .14em; }
+.side-date { font-size: .76rem; color: #94A3B8 !important; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: .55rem .8rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.side-date b { color: #fff !important; font-weight: 700; font-variant-numeric: tabular-nums; }
 .side-user { font-size: .76rem; color: #94A3B8 !important; line-height: 1.55; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 12px; padding: .75rem .9rem; margin-bottom: .8rem; word-break: break-all; }
 .side-user b { color: #fff !important; font-weight: 600; }
 
 /* ---------- Chips & badges ---------- */
-.chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; vertical-align: middle; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .68rem; font-weight: 700; vertical-align: middle; letter-spacing: .01em; }
 .chip-acoes { background: #DBEAFE; color: #1D4ED8; }
 .chip-fiis { background: #EDE9FE; color: #6D28D9; }
 .chip-rendafixa { background: #D1FAE5; color: #047857; }
@@ -611,7 +640,7 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"], section[dat
 .chip-pix { background: #FEF3C7; color: #92400E; }
 .chip-entrada { background: #DCFCE7; color: #166534; }
 .chip-saida { background: #FEE2E2; color: #991B1B; }
-.badge-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; font-size: .74rem; font-weight: 700; white-space: nowrap; }
+.badge-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; font-size: .72rem; font-weight: 700; white-space: nowrap; }
 .badge-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .status-alta { background: #DCFCE7; color: #15803D; }
 .status-baixa { background: #FEE2E2; color: #B91C1C; }
@@ -622,25 +651,32 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"], section[dat
 /* ---------- Ativos ---------- */
 .asset { display: flex; align-items: center; gap: 12px; }
 .avatar { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; font-size: .78rem; flex-shrink: 0; letter-spacing: .02em; }
-.asset-tk { font-size: 1.05rem; font-weight: 800; color: var(--ink); letter-spacing: -.01em; }
+.asset-tk { font-size: 1.02rem; font-weight: 800; color: var(--ink); letter-spacing: -.01em; }
 .asset-sub { font-size: .76rem; color: var(--ink-3); margin-top: 1px; }
-.cell-l { font-size: .74rem; color: var(--ink-3); font-weight: 600; }
-.cell-v { font-size: .98rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
-.cell-big { font-size: 1.1rem; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.cell-l { font-size: .72rem; color: var(--ink-3); font-weight: 600; letter-spacing: .01em; }
+.cell-v { font-size: .96rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cell-big { font-size: 1.08rem; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+
+/* ---------- Devedores ---------- */
+.dv-due { font-size: .95rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dv-meta { font-size: .76rem; color: var(--ink-3); margin-top: 2px; }
+.dv-neg { color: var(--neg) !important; }
+.dv-pos { color: var(--pos) !important; }
+.dv-warn { color: var(--warn) !important; }
+.prog-sm { height: 6px !important; margin: 6px 0 5px; }
 
 /* ---------- Cards genéricos ---------- */
-.card-pro { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 1.5rem 1.8rem; margin-bottom: 1.2rem; box-shadow: var(--sh-sm); }
-.tip { background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: var(--r-md); padding: .9rem 1.2rem; margin-bottom: 10px; color: var(--ink); box-shadow: var(--sh-xs); font-size: .92rem; line-height: 1.55; }
-.person { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: .95rem 1.3rem; margin: 18px 0 8px; box-shadow: var(--sh-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
-.empty { text-align: center; padding: 2.8rem 1.5rem; border: 1.5px dashed #CBD5E1; border-radius: var(--r-lg); color: var(--ink-3); background: rgba(255,255,255,.6); margin: 1rem 0; font-size: .92rem; }
-.empty-i { font-size: 1.8rem; margin-bottom: .4rem; opacity: .85; }
-.prog-wrap { background: #E2E8F0; border-radius: 999px; height: 14px; overflow: hidden; }
+.card-pro { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 1.4rem 1.7rem; margin-bottom: 1.2rem; box-shadow: var(--sh-sm); }
+.tip { background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: var(--r-md); padding: .9rem 1.2rem; margin-bottom: 10px; color: var(--ink); box-shadow: var(--sh-xs); font-size: .91rem; line-height: 1.55; }
+.person { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: .9rem 1.3rem; margin: 18px 0 8px; box-shadow: var(--sh-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.empty { text-align: center; padding: 2.4rem 1.5rem; border: 1.5px dashed #CBD5E1; border-radius: var(--r-lg); color: var(--ink-3); background: rgba(255,255,255,.6); margin: 1rem 0; font-size: .9rem; }
+.prog-wrap { background: #E2E8F0; border-radius: 999px; height: 12px; overflow: hidden; }
 .prog-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #14B8A6, #0F766E); }
 
 /* ---------- Calendário ---------- */
 /* minmax(0,1fr): impede que o texto das etiquetas alargue as colunas e distorça o calendário no celular */
 .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin: 12px 0 22px 0; width: 100%; max-width: 100%; }
-.cal-head { text-align: center; font-weight: 700; font-size: .74rem; padding: 9px 4px; background: var(--navy); border-radius: 10px; color: #CBD5E1; letter-spacing: .08em; text-transform: uppercase; min-width: 0; overflow: hidden; }
+.cal-head { text-align: center; font-weight: 700; font-size: .72rem; padding: 9px 4px; background: var(--navy); border-radius: 10px; color: #CBD5E1; letter-spacing: .08em; text-transform: uppercase; min-width: 0; overflow: hidden; }
 .cal-cell { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; min-height: 92px; padding: 7px; display: flex; flex-direction: column; box-shadow: var(--sh-xs); min-width: 0; overflow: hidden; }
 .cal-cell-empty { background: transparent; border: 1px dashed var(--line); min-height: 92px; border-radius: 12px; min-width: 0; }
 .cal-day-num { font-size: .8rem; font-weight: 700; color: var(--ink-3); margin-bottom: 5px; }
@@ -672,11 +708,11 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
 .stDateInput div[data-baseweb="input"]:focus-within, .stSelectbox div[data-baseweb="select"] > div:focus-within {
   border-color: var(--brand-2) !important; box-shadow: 0 0 0 3px rgba(20,184,166,.15) !important;
 }
-.stApp label p, [data-testid="stWidgetLabel"] p { font-weight: 600 !important; color: var(--ink-2) !important; font-size: .84rem !important; }
+.stApp label p, [data-testid="stWidgetLabel"] p { font-weight: 600 !important; color: var(--ink-2) !important; font-size: .82rem !important; }
 
 .stButton > button, .stFormSubmitButton > button, [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"],
 [data-testid="stBaseButton-secondaryFormSubmit"], [data-testid="stBaseButton-primaryFormSubmit"] {
-  border-radius: 10px !important; font-weight: 600 !important; transition: all .15s ease !important; box-shadow: var(--sh-xs);
+  border-radius: 10px !important; font-weight: 600 !important; transition: all .15s ease !important; box-shadow: var(--sh-xs); min-height: 2.5rem;
 }
 .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"],
 [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
@@ -704,7 +740,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="secondary"], section[d
 
 [data-testid="stExpander"] { border: 1px solid var(--line) !important; border-radius: var(--r-lg) !important; background: var(--paper); box-shadow: var(--sh-xs); overflow: hidden; }
 [data-testid="stExpander"] details, [data-testid="stExpander"] summary { border: none !important; }
-[data-testid="stExpander"] summary p { font-weight: 700 !important; color: var(--ink) !important; font-size: .92rem !important; }
+[data-testid="stExpander"] summary p { font-weight: 700 !important; color: var(--ink) !important; font-size: .9rem !important; }
 
 /* Expander dentro da sidebar (alterar senha): visual escuro, integrado ao menu */
 section[data-testid="stSidebar"] [data-testid="stExpander"] { background: rgba(255,255,255,.04) !important; border: 1px solid rgba(255,255,255,.1) !important; box-shadow: none !important; }
@@ -720,8 +756,8 @@ hr { border-color: var(--line) !important; }
 
 @media (max-width: 768px) {
   .block-container { padding: 1rem 1rem 4rem !important; }
-  .hero-title { font-size: 1.45rem; }
-  .hero-box { padding: 1.3rem 1.2rem; }
+  .hero-title { font-size: 1.4rem; }
+  .hero-box { padding: 1.2rem 1.2rem; }
   .banner-v { font-size: 1.8rem; text-align: left; }
   .cal-cell, .cal-cell-empty { min-height: 60px; }
   .cal-tag { font-size: .58rem; }
@@ -809,7 +845,7 @@ def render_tela_login():
     .lg-p { font-size:1.02rem; color:#475569; line-height:1.65; max-width:640px; margin:0 auto; }
     .lg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin: 1.6rem 0 1.8rem; }
     .lg-card { background:#fff; border:1px solid #E5E9F0; border-radius:16px; padding:1.1rem 1.2rem; box-shadow:0 1px 3px rgba(11,18,32,.06); }
-    .lg-ic { width:38px; height:38px; border-radius:11px; background:#E6F6F4; display:grid; place-items:center; font-size:1.1rem; margin-bottom:.6rem; }
+    .lg-ic { width:38px; height:38px; border-radius:11px; background:#E6F6F4; color:#0F766E; display:grid; place-items:center; font-size:.82rem; font-weight:800; letter-spacing:.04em; margin-bottom:.6rem; }
     .lg-ft { font-weight:800; color:#0B1220; font-size:.95rem; }
     .lg-fd { color:#64748B; font-size:.84rem; margin-top:3px; line-height:1.5; }
     .lg-logo { width:54px; height:54px; border-radius:16px; background:linear-gradient(135deg,#14B8A6,#0F766E); display:grid; place-items:center; font-size:1.15rem; font-weight:800; color:#FFFFFF; letter-spacing:.02em; margin:0 auto 12px; box-shadow:0 12px 26px -8px rgba(15,118,110,.5); }
@@ -838,10 +874,10 @@ def render_tela_login():
       <div class="lg-p">{APP_SLOGAN}. Quem sabe exatamente quanto ganha, quanto deve e para onde o dinheiro vai toma decisões melhores, evita dívidas e constrói patrimônio com tranquilidade.</div>
     </div>
     <div class="lg-grid">
-      <div class="lg-card"><div class="lg-ic">🎯</div><div class="lg-ft">Clareza para decidir</div><div class="lg-fd">Veja num só painel investimentos, cartão, contas, caixinhas e metas, sem planilhas espalhadas.</div></div>
-      <div class="lg-card"><div class="lg-ic">🛡️</div><div class="lg-ft">Fim dos sustos</div><div class="lg-fd">Calendário de vencimentos e diagnóstico do mês mostram o que você pode gastar com segurança.</div></div>
-      <div class="lg-card"><div class="lg-ic">📈</div><div class="lg-ft">Patrimônio crescendo</div><div class="lg-fd">Acompanhe ações, FIIs, cripto e dólar em tempo real e defina metas de patrimônio e renda.</div></div>
-      <div class="lg-card"><div class="lg-ic">📱</div><div class="lg-ft">Em qualquer lugar</div><div class="lg-fd">Acesse do computador ou do celular, com seus dados protegidos e isolados na nuvem.</div></div>
+      <div class="lg-card"><div class="lg-ic">01</div><div class="lg-ft">Clareza para decidir</div><div class="lg-fd">Veja num só painel investimentos, cartão, contas, caixinhas e metas, sem planilhas espalhadas.</div></div>
+      <div class="lg-card"><div class="lg-ic">02</div><div class="lg-ft">Fim dos sustos</div><div class="lg-fd">Vencimentos e diagnóstico do mês mostram o que você pode gastar com segurança.</div></div>
+      <div class="lg-card"><div class="lg-ic">03</div><div class="lg-ft">Patrimônio crescendo</div><div class="lg-fd">Acompanhe ações, FIIs, cripto e dólar em tempo real e defina metas de patrimônio e renda.</div></div>
+      <div class="lg-card"><div class="lg-ic">04</div><div class="lg-ft">Em qualquer lugar</div><div class="lg-fd">Acesse do computador ou do celular, com seus dados protegidos e isolados na nuvem.</div></div>
     </div>
     """)
 
@@ -856,7 +892,7 @@ def render_tela_login():
         """)
 
         with st.container(border=True):
-            st.markdown("#### 🔑 Acessar minha conta")
+            st.markdown("#### Acessar minha conta")
             with st.form("form_login"):
                 email_login = st.text_input("E-mail cadastrado", placeholder="seu.email@exemplo.com").strip().lower()
                 senha_login = st.text_input("Sua senha", type="password", placeholder="Digite sua senha")
@@ -880,13 +916,33 @@ def render_tela_login():
 
             # Se alguém que não pagou receber o link, ele vê isto:
             st.markdown("<p style='text-align:center;font-size:0.88rem;color:#64748B;margin-bottom:8px'>Ainda não tem sua licença de acesso?</p>", unsafe_allow_html=True)
-            st.link_button("👉 Adquira seu acesso aqui", LINK_COMPRA, use_container_width=True, type="primary")
+            st.link_button("Adquirir meu acesso", LINK_COMPRA, use_container_width=True, type="primary")
 
-        st.markdown("<p style='text-align:center;font-size:0.75rem;color:#94A3B8;margin-top:1.2rem'>🔒 Ambiente seguro e blindado contra acessos não autorizados.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center;font-size:0.75rem;color:#94A3B8;margin-top:1.2rem'>Ambiente seguro e blindado contra acessos não autorizados.</p>", unsafe_allow_html=True)
 
 if st.session_state["auth_user"] is None:
     render_tela_login()
     st.stop()
+
+# ==============================================================================
+# ACOMPANHAMENTO DE DATA E MÊS (vira o dia / vira o mês sem precisar recarregar)
+# ==============================================================================
+_hoje_ref = hoje_br()
+_mes_ref = (_hoje_ref.year, _hoje_ref.month)
+if st.session_state.get("_mes_ref") not in (None, _mes_ref):
+    # O mês virou com o app aberto: volta todos os seletores para o mês atual
+    for _k in CHAVES_SELETORES_MES:
+        st.session_state.pop(_k, None)
+st.session_state["_mes_ref"] = _mes_ref
+st.session_state["_dia_ref"] = _hoje_ref
+
+def _vigia_data():
+    """Roda sozinho a cada 60s: se a data mudou (virou o dia/mês), recarrega o app inteiro."""
+    if hoje_br() != st.session_state.get("_dia_ref"):
+        st.rerun()
+
+if hasattr(st, "fragment"):
+    st.fragment(run_every=60)(_vigia_data)()
 
 # ==============================================================================
 # CARREGAMENTO E SINCRONIZAÇÃO
@@ -1070,7 +1126,7 @@ def inicio_fatura_compra(c):
     try:
         dt_compra = datetime.strptime(c["data_compra"], "%Y-%m-%d").date()
     except Exception:
-        dt_compra = date.today()
+        dt_compra = hoje_br()
     m = dt_compra.month + (1 if dt_compra.day >= 15 else 0)
     a = dt_compra.year + (1 if m > 12 else 0)
     m = 1 if m > 12 else m
@@ -1127,47 +1183,63 @@ def registrar_mov_caixinha(caixinha_id, tipo, valor, data_mov, obs=""):
         "obs": obs
     })
 
+def primeiro_vencimento_divida(dev):
+    """Data do 1º vencimento da dívida. Cadastros antigos usam a data de vencimento
+    gravada; na falta dela, usa a data de início."""
+    for campo in ("data_vencimento", "data_emprestimo", "data"):
+        s = dev.get(campo)
+        if s:
+            try:
+                return datetime.strptime(str(s)[:10], "%Y-%m-%d").date()
+            except Exception:
+                continue
+    return hoje_br()
+
 def calcular_atraso_real_divida(dev):
+    """Atraso calculado SEMPRE pela data de vencimento de cada parcela:
+    a parcela só entra em atraso depois que o dia do vencimento passou e ela não foi paga."""
     v_tot = float(dev.get("valor_total", 0.0))
     parc_tot = max(int(dev.get("parcelas_total", 1)), 1)
     v_parc = float(dev.get("valor_parcela", v_tot / parc_tot if parc_tot else 0.0))
     tot_pago = float(dev.get("total_pago_reais", 0.0))
     falta_tot = max(0.0, v_tot - tot_pago)
 
-    hoje_atual = date.today()
-    dt_inicio_str = dev.get("data_emprestimo") or dev.get("data", hoje_atual.strftime("%Y-%m-%d"))
-    try:
-        dt_ini = datetime.strptime(dt_inicio_str, "%Y-%m-%d").date()
-    except Exception:
-        dt_ini = hoje_atual
+    hoje_atual = hoje_br()
+    primeiro = primeiro_vencimento_divida(dev)
+    vencimentos = [somar_meses(primeiro, k) for k in range(parc_tot)]
 
-    meses_decorridos = (hoje_atual.year - dt_ini.year) * 12 + (hoje_atual.month - dt_ini.month)
-    if hoje_atual.day >= dt_ini.day:
-        meses_decorridos += 1
-
-    parc_esperadas = min(parc_tot, max(0, meses_decorridos))
-    val_esperado = parc_esperadas * v_parc
+    parc_vencidas = sum(1 for v in vencimentos if v < hoje_atual)
+    val_esperado = min(parc_vencidas * v_parc, v_tot)
     val_atraso = max(0.0, min(falta_tot, val_esperado - tot_pago))
 
-    # Valor da parcela do mês (é isso que deve aparecer na etiqueta "Em atraso",
-    # e não o valor total acumulado). Nunca passa do que ainda falta pagar.
+    n_pagas = min(parc_tot, int((tot_pago + 0.05) // v_parc)) if v_parc > 0 else 0
+    venc_atual = vencimentos[min(n_pagas, parc_tot - 1)]  # vencimento da próxima parcela em aberto
+
+    # Valor da parcela do mês (é o que aparece na etiqueta "Em atraso")
     parcela_mes = min(v_parc, falta_tot)
+    pct_pago = min(100.0, tot_pago / v_tot * 100) if v_tot > 0 else 0.0
 
     is_quitado = falta_tot <= 0.05 or dev.get("status") == "quitado"
+    dias_atraso = 0
+    n_atr = 0
 
     if is_quitado:
         status_d = "quitado"
         badge = "<span class='badge-status status-alta'>Quitado</span>"
-        msg_detalhe = "Dívida totalmente paga!"
-    elif val_atraso > 0:
+        msg_detalhe = "Dívida totalmente paga"
+    elif val_atraso > 0.05:
         status_d = "atrasado"
-        badge = f"<span class='badge-status status-atraso'>Em atraso: {fmt_moeda(parcela_mes)}</span>"
-        n_parc_atr = int(round(val_atraso / v_parc)) if v_parc > 0 else 1
-        msg_detalhe = f"{n_parc_atr} parcela(s) vencida(s)"
+        dias_atraso = max(0, (hoje_atual - venc_atual).days)
+        n_atr = max(1, int(math.ceil((val_atraso - 0.05) / v_parc))) if v_parc > 0 else 1
+        badge = f"<span class='badge-status status-atraso'>Em atraso: {fmt_moeda(parcela_mes)} · venc. {venc_atual.strftime('%d/%m/%Y')}</span>"
+        msg_detalhe = f"{n_atr} parcela(s) vencida(s) · {dias_atraso} dia(s) de atraso"
     else:
         status_d = "em_dia"
-        badge = "<span class='badge-status status-alta'>Em dia</span>"
-        msg_detalhe = "Parcelas em dia"
+        if venc_atual == hoje_atual:
+            badge = "<span class='badge-status status-alerta'>Vence hoje</span>"
+        else:
+            badge = "<span class='badge-status status-alta'>Em dia</span>"
+        msg_detalhe = f"Próximo vencimento: {venc_atual.strftime('%d/%m/%Y')}"
 
     return {
         "falta_total": falta_tot,
@@ -1178,8 +1250,23 @@ def calcular_atraso_real_divida(dev):
         "total_contratado": v_tot,
         "status": status_d,
         "badge": badge,
-        "msg_detalhe": msg_detalhe
+        "msg_detalhe": msg_detalhe,
+        "proximo_venc": venc_atual,
+        "primeiro_venc": primeiro,
+        "dias_atraso": dias_atraso,
+        "n_parc_atrasadas": n_atr,
+        "parcelas_pagas": n_pagas,
+        "pct_pago": pct_pago,
     }
+
+def reavaliar_status_divida(dev):
+    """Recalcula o status e as parcelas pagas depois de registrar, editar ou apagar pagamentos."""
+    pago = max(0.0, float(dev.get("total_pago_reais", 0.0)))
+    dev["total_pago_reais"] = pago
+    falta = float(dev.get("valor_total", 0.0)) - pago
+    dev["status"] = "quitado" if falta <= 0.05 else "pendente"
+    vp = float(dev.get("valor_parcela", 0.0))
+    dev["parcelas_pagas"] = int(pago / vp) if vp > 0 else 0
 
 def sincronizar_dividendos_carteira(mes, ano):
     adicionados = 0
@@ -1229,6 +1316,7 @@ MENU_ITENS = [
 ]
 
 with st.sidebar:
+    _agora_sb = agora_br()
     md(f"""
     <div class="brand">
       <div class="brand-mark">{html.escape(iniciais)}</div>
@@ -1237,6 +1325,7 @@ with st.sidebar:
         <div class="brand-sub">{APP_NOME}</div>
       </div>
     </div>
+    <div class="side-date"><span>Hoje</span><b>{_agora_sb.strftime('%d/%m/%Y')}</b></div>
     <div class="side-label" style="margin-top:0">Menu</div>
     """)
 
@@ -1269,7 +1358,7 @@ with st.sidebar:
     # --------------------------------------------------------------------------
     # ALTERAR MINHA SENHA (o cliente troca a própria senha pelo painel)
     # --------------------------------------------------------------------------
-    with st.expander("🔒 Alterar minha senha"):
+    with st.expander("Alterar minha senha"):
         with st.form("form_alt_senha", clear_on_submit=True):
             nova_senha = st.text_input("Nova senha (mínimo 6 caracteres)", type="password", placeholder="Digite a nova senha")
             conf_senha = st.text_input("Confirme a nova senha", type="password", placeholder="Repita a nova senha")
@@ -1459,7 +1548,7 @@ def listar_ativos(df_view):
                         else:
                             qtd_venda = st.number_input("Cotas vendidas", min_value=1, max_value=int(row["qtd"]), value=int(row["qtd"]), step=1, key=f"v_qtd_{row['id']}")
                         p_venda = st.number_input("Valor da venda por unidade (R$)", min_value=0.0001, value=float(row["preco_atual"]), format="%.4f" if cl == "Dólar" else "%.2f", key=f"v_p_{row['id']}")
-                        dt_venda = st.date_input("Data da venda", value=date.today(), format="DD/MM/YYYY", key=f"v_dt_{row['id']}")
+                        dt_venda = st.date_input("Data da venda", value=hoje_br(), format="DD/MM/YYYY", key=f"v_dt_{row['id']}")
 
                         if st.button("Confirmar Venda", key=f"btn_v_{row['id']}", type="primary", use_container_width=True):
                             db.setdefault("vendas", []).append({
@@ -1506,7 +1595,7 @@ def listar_ativos(df_view):
 if menu == "Visão Geral":
     hero(f"Visão Geral · {NOME_USUARIO_LOGADO}", "Painel consolidado e interativo: clique em “Ver detalhes” em cada card para ver exatamente o que compõe cada número.")
 
-    hoje = date.today()
+    hoje = hoje_br()
 
     c_m1, c_m2 = st.columns([2.5, 1])
     with c_m1:
@@ -1623,7 +1712,7 @@ if menu == "Visão Geral":
                     st.caption("Nenhuma conta fixa cadastrada para este mês.")
                 else:
                     for cf in contas_mes:
-                        st_icon = "✅ PAGO" if cf.get("status") == "pago" else "⏳ A PAGAR"
+                        st_icon = "PAGO" if cf.get("status") == "pago" else "A PAGAR"
                         st.write(f"• **{cf['nome']}** (Dia {cf['dia_vencimento']}): {fmt_moeda(cf['valor'])} — *{st_icon}*")
 
     with col_c5:
@@ -1733,17 +1822,14 @@ if menu == "Visão Geral":
             </div>
             """)
     else:
-        vazio("Cadastre ativos na aba “Minha Carteira” para ver o desempenho dos seus investimentos.", "📈")
+        vazio("Cadastre ativos na aba “Minha Carteira” para ver o desempenho dos seus investimentos.")
 
     secao("Devedores", "Valores que terceiros ainda te devem.")
     devedores = db.get("devedores", [])
-    total_geral_receber = sum(calcular_atraso_real_divida(d)["falta_total"] for d in devedores)
-    # Em atraso = soma das parcelas do mês das dívidas que estão atrasadas (e não o total acumulado)
-    total_atraso_devedores = sum(
-        calcular_atraso_real_divida(d)["parcela_mes"]
-        for d in devedores
-        if calcular_atraso_real_divida(d)["status"] == "atrasado"
-    )
+    infos_dev = [calcular_atraso_real_divida(d) for d in devedores]
+    total_geral_receber = sum(i["falta_total"] for i in infos_dev)
+    # Em atraso = soma das parcelas do mês das dívidas realmente vencidas (pela data de vencimento)
+    total_atraso_devedores = sum(i["parcela_mes"] for i in infos_dev if i["status"] == "atrasado")
 
     md(f"""
     <div class="card-pro">
@@ -1761,9 +1847,9 @@ if menu == "Visão Geral":
 # TELA: RESUMO & DIAGNÓSTICO
 # ==============================================================================
 elif menu == "Resumo & Diagnóstico":
-    hero("Resumo & Diagnóstico Financeiro", "Tenha a visão exata do seu dinheiro, do que pode gastar, e dispare o relatório direto para seu e-mail.")
+    hero("Resumo & Diagnóstico Financeiro", "Tenha a visão exata do seu dinheiro e do que pode gastar com segurança neste mês.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
     m_diag = c1.selectbox("Mês do Diagnóstico", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="diag_mes")
     a_diag = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="diag_ano")
@@ -1789,13 +1875,13 @@ elif menu == "Resumo & Diagnóstico":
 
     dicas = []
     if ent_m > 0 and (fat_card / ent_m) > 0.40:
-        dicas.append(f"💳 <b>Atenção ao Cartão de Crédito:</b> Sua fatura consome {fat_card / ent_m * 100:.1f}% da sua renda mensal. O ideal é manter abaixo de 35% para não comprometer os próximos meses.")
+        dicas.append(f"<b>Atenção ao cartão de crédito:</b> sua fatura consome {fat_card / ent_m * 100:.1f}% da sua renda mensal. O ideal é manter abaixo de 35% para não comprometer os próximos meses.")
     if pode_gastar_seguro > 300:
-        dicas.append(f"💰 <b>Oportunidade de Investir:</b> Você tem {fmt_moeda(pode_gastar_seguro)} livres e seguros este mês. Considere colocar metade em Caixinha de Emergência e outra metade em FIIs de dividendos.")
+        dicas.append(f"<b>Oportunidade de investir:</b> você tem {fmt_moeda(pode_gastar_seguro)} livres e seguros este mês. Considere colocar metade em uma caixinha de emergência e a outra metade em FIIs de dividendos.")
     if tot_cfix > 0 and (tot_cfix / (ent_m if ent_m > 0 else 1)) > 0.50:
-        dicas.append("🏠 <b>Contas Fixas Altas:</b> Suas despesas fixas pesam mais de 50% das suas entradas. Tente renegociar assinaturas, pacotes de internet e consumo.")
+        dicas.append("<b>Contas fixas altas:</b> suas despesas fixas pesam mais de 50% das suas entradas. Tente renegociar assinaturas, pacotes de internet e consumo.")
     if not dicas:
-        dicas.append("🎉 <b>Parabéns!</b> Seu fluxo financeiro deste mês está equilibrado, seguro e pronto para continuar crescendo.")
+        dicas.append("<b>Tudo certo:</b> seu fluxo financeiro deste mês está equilibrado, seguro e pronto para continuar crescendo.")
 
     md(f"""
     <div class="stats">
@@ -1810,12 +1896,12 @@ elif menu == "Resumo & Diagnóstico":
         md(f"<div class='tip'>{d}</div>")
 
 # ==============================================================================
-# TELA: CONTAS FIXAS & CALENDÁRIO
+# TELA: CONTAS FIXAS
 # ==============================================================================
 elif menu == "Contas Fixas":
-    hero("Contas Fixas & Calendário", "Gerencie suas despesas fixas. O cartão de crédito é sincronizado automaticamente no dia 22 de cada mês!")
+    hero("Contas Fixas", "Gerencie suas despesas fixas e acompanhe os vencimentos. A fatura do cartão de crédito entra automaticamente no dia 22 de cada mês.")
 
-    hoje = date.today()
+    hoje = hoje_br()
 
     c_m1, c_m2 = st.columns([2.5, 1])
     with c_m1:
@@ -1826,7 +1912,7 @@ elif menu == "Contas Fixas":
     chave_mes_contas = f"{ano_contas:04d}-{mes_contas_idx:02d}"
     nome_mes_contas = MESES_PT[mes_contas_idx - 1]
 
-    with st.expander("➕ Cadastrar nova conta fixa", expanded=False):
+    with st.expander("Cadastrar nova conta fixa", expanded=False):
         with st.form("form_nova_conta_fixa", clear_on_submit=True):
             f_col1, f_col2, f_col3 = st.columns(3)
             nome_cf = f_col1.text_input("Nome da Conta", placeholder="Ex: Aluguel, Luz, Internet, Netflix, Academia").strip()
@@ -1884,8 +1970,8 @@ elif menu == "Contas Fixas":
     </div>
     """)
 
-    # CALENDÁRIO VISUAL
-    secao(f"Calendário de contas — {nome_mes_contas}/{ano_contas}")
+    # MAPA VISUAL DE VENCIMENTOS
+    secao(f"Vencimentos de {nome_mes_contas}/{ano_contas}")
 
     cal_obj = calendar.Calendar(firstweekday=0)
     semanas = cal_obj.monthdayscalendar(ano_contas, mes_contas_idx)
@@ -1897,7 +1983,7 @@ elif menu == "Contas Fixas":
 
     if fatura_cartao_dinamica > 0:
         mapa_dias.setdefault(22, []).append({
-            "id": "fatura_cartao_auto", "nome": "💳 Fatura Cartão", "categoria": "Cartão de Crédito",
+            "id": "fatura_cartao_auto", "nome": "Fatura cartão", "categoria": "Cartão de Crédito",
             "valor": fatura_cartao_dinamica, "status": "pago" if cartao_pago_neste_mes else "pendente", "dia_vencimento": 22
         })
 
@@ -1942,28 +2028,30 @@ elif menu == "Contas Fixas":
     md(grid_html)
 
     # LISTAGEM
-    secao(f"Lista detalhada de obrigações — {nome_mes_contas}/{ano_contas}")
+    secao(f"Obrigações de {nome_mes_contas}/{ano_contas}")
+
+    COLS_CONTAS = [1.0, 2.2, 1.3, 1.4, 0.9, 0.5]
 
     if fatura_cartao_dinamica > 0:
         dt_venc_c = date(ano_contas, mes_contas_idx, 22)
         atrasada_c = (not cartao_pago_neste_mes) and (dt_venc_c < hoje)
         with st.container(border=True):
-            c_d, c_i, c_v, c_ac, _ = st.columns([1.1, 2.3, 1.3, 1.4, 0.4], vertical_alignment="center")
+            c_d, c_i, c_v, c_ac, _, _ = st.columns(COLS_CONTAS, vertical_alignment="center")
             c_d.markdown(f"<div class='cell-big'>Dia 22</div><div class='cell-l'>{dt_venc_c.strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
-            c_i.markdown(f"<div class='asset-tk'>💳 Fatura do cartão de crédito <span class='chip chip-cartao'>Automático</span></div><div class='asset-sub'>Valor calculado a partir das compras de {nome_mes_contas}</div>", unsafe_allow_html=True)
+            c_i.markdown(f"<div class='asset-tk'>Fatura do cartão de crédito <span class='chip chip-cartao'>Automático</span></div><div class='asset-sub'>Valor calculado a partir das compras de {nome_mes_contas}</div>", unsafe_allow_html=True)
             cor_v_c = "#15803D" if cartao_pago_neste_mes else ("#B91C1C" if atrasada_c else "#0F766E")
             st_badge = "<span class='badge-status status-alta'>Fatura paga</span>" if cartao_pago_neste_mes else ("<span class='badge-status status-atraso'>Fatura atrasada</span>" if atrasada_c else "<span class='badge-status status-neutro'>A vencer</span>")
             c_v.markdown(f"<span style='font-size:1.15rem;font-weight:900;color:{cor_v_c}'>{fmt_moeda(fatura_cartao_dinamica)}</span><br>{st_badge}", unsafe_allow_html=True)
 
             with c_ac:
                 if cartao_pago_neste_mes:
-                    if st.button("↩️ Reabrir fatura", key="reab_fat_card"):
+                    if st.button("Reabrir fatura", key="reab_fat_card", use_container_width=True):
                         db["faturas_pagas"] = [x for x in db["faturas_pagas"] if x != chave_mes_contas]
                         salvar_dados(db)
                         st.toast("Fatura reaberta!")
                         st.rerun()
                 else:
-                    if st.button("✅ Marcar fatura paga", key="pag_fat_card", type="primary"):
+                    if st.button("Marcar fatura paga", key="pag_fat_card", type="primary", use_container_width=True):
                         db.setdefault("faturas_pagas", []).append(chave_mes_contas)
                         salvar_dados(db)
                         st.toast("Fatura marcada como Paga!", icon="✅")
@@ -1985,7 +2073,7 @@ elif menu == "Contas Fixas":
             badge_st = "<span class='badge-status status-neutro'>A vencer</span>"
 
         with st.container(border=True):
-            col_dia, col_info, col_val, col_acao, col_del = st.columns([1.1, 2.3, 1.3, 1.4, 0.4], vertical_alignment="center")
+            col_dia, col_info, col_val, col_acao, col_edit, col_del = st.columns(COLS_CONTAS, vertical_alignment="center")
             with col_dia:
                 md(f"""<div><div class='cell-big'>Dia {c['dia_vencimento']}</div>
                 <div class='cell-l'>{dt_venc.strftime('%d/%m/%Y')}</div></div>""")
@@ -2001,18 +2089,46 @@ elif menu == "Contas Fixas":
 
             with col_acao:
                 if pago:
-                    if st.button("↩️ Reabrir", key=f"reab_{c['id']}", use_container_width=True):
+                    if st.button("Reabrir", key=f"reab_{c['id']}", use_container_width=True):
                         c["status"] = "pendente"
                         c["data_pagamento"] = None
                         salvar_dados(db)
                         st.toast(f"{c['nome']} reaberta!")
                         st.rerun()
                 else:
-                    if st.button("✅ Marcar pago", key=f"pag_{c['id']}", type="primary", use_container_width=True):
+                    if st.button("Marcar pago", key=f"pag_{c['id']}", type="primary", use_container_width=True):
                         c["status"] = "pago"
                         c["data_pagamento"] = hoje.strftime("%Y-%m-%d")
                         salvar_dados(db)
                         st.toast(f"{c['nome']} marcada como Paga!", icon="✅")
+                        st.rerun()
+
+            with col_edit:
+                with st.popover("Editar", use_container_width=True):
+                    st.markdown(f"**Editar conta fixa**")
+                    e_nome = st.text_input("Nome da conta", value=c["nome"], key=f"cf_n_{c['id']}")
+                    idx_cat_cf = LISTA_CATEGORIAS_CONTAS.index(c["categoria"]) if c.get("categoria") in LISTA_CATEGORIAS_CONTAS else 0
+                    e_cat = st.selectbox("Categoria", LISTA_CATEGORIAS_CONTAS, index=idx_cat_cf, key=f"cf_c_{c['id']}")
+                    e_val = st.number_input("Valor (R$)", min_value=0.01, value=max(0.01, float(c["valor"])), step=10.0, key=f"cf_v_{c['id']}")
+                    e_dia = st.number_input("Dia do vencimento", min_value=1, max_value=31, value=int(c["dia_vencimento"]), step=1, key=f"cf_d_{c['id']}")
+                    e_prop = st.checkbox("Aplicar também aos meses seguintes", value=False, key=f"cf_p_{c['id']}",
+                                         help="Altera nome, categoria, valor e dia de todas as contas iguais dos meses seguintes.")
+                    if st.button("Salvar alterações", key=f"cf_s_{c['id']}", type="primary", use_container_width=True):
+                        nome_antigo, cat_antiga = c["nome"], c.get("categoria")
+                        alvos = [c]
+                        if e_prop:
+                            alvos += [x for x in db["contas_fixas"]
+                                      if x["id"] != c["id"] and x["nome"] == nome_antigo
+                                      and x.get("categoria") == cat_antiga and x["mes_ano"] > c["mes_ano"]]
+                        nome_novo = e_nome.strip().title() or nome_antigo
+                        for x in alvos:
+                            a_x, m_x = int(x["mes_ano"][:4]), int(x["mes_ano"][5:7])
+                            x["nome"] = nome_novo
+                            x["categoria"] = e_cat
+                            x["valor"] = float(e_val)
+                            x["dia_vencimento"] = min(int(e_dia), calendar.monthrange(a_x, m_x)[1])
+                        salvar_dados(db)
+                        st.toast(f"{len(alvos)} conta(s) atualizada(s)!", icon="✏️")
                         st.rerun()
 
             with col_del:
@@ -2028,17 +2144,17 @@ elif menu == "Minha Carteira":
     hero("Minha Carteira", "Ações, FIIs, Cripto, Dólar e Caixinhas — com cotações em tempo real e Radar de Aportes da Bolsa.")
 
     aba_invest, aba_radar, aba_alt, aba_caixinhas, aba_vendas = st.tabs([
-        "📈 Ações, FIIs e Renda Fixa",
-        "🎯 Radar da Bolsa",
-        "₿ Cripto & Dólar",
-        "📦 Caixinhas",
-        "💸 Histórico de Vendas"
+        "Ações, FIIs e Renda Fixa",
+        "Radar da Bolsa",
+        "Cripto & Dólar",
+        "Caixinhas",
+        "Histórico de Vendas"
     ])
 
     with aba_invest:
         df_t1 = df_ativos[~df_ativos["classe"].isin(CLASSES_ALT)]
 
-        with st.expander("➕ Adicionar ação, FII ou renda fixa", expanded=df_t1.empty):
+        with st.expander("Adicionar ação, FII ou renda fixa", expanded=df_t1.empty):
             with st.form("form_novo_ativo", clear_on_submit=True):
                 f1, f2, f3 = st.columns(3)
                 ticker_in = f1.text_input("Código do Ativo (Ticker)", placeholder="Ex: PETR4, MXRF11, HGLG11").strip().upper()
@@ -2065,7 +2181,7 @@ elif menu == "Minha Carteira":
                         st.rerun()
 
         if df_t1.empty:
-            vazio("Nenhum ativo cadastrado nesta classe. Use o botão acima para cadastrar.", "📈")
+            vazio("Nenhum ativo cadastrado nesta classe. Use o botão acima para cadastrar.")
         else:
             listar_ativos(df_t1)
 
@@ -2119,7 +2235,7 @@ elif menu == "Minha Carteira":
                         <div><span class="cell-l">VOCÊ TEM</span><br><b style="font-size:1.05rem;color:#0B1220">{int(row['qtd'])} cotas</b></div>
                       </div>
                       <div style="font-size:.86rem;color:#334155;margin-top:12px;padding-top:10px;border-top:1px dashed #CBD5E1;line-height:1.5">
-                        💡 {msg_radar}
+                        {msg_radar}
                       </div>
                     </div>
                     """)
@@ -2127,33 +2243,33 @@ elif menu == "Minha Carteira":
         st.divider()
         secao("Oportunidades do mercado aberto", "Ativos monitorados pelo mercado com preços atraentes ou altos pagamentos de dividendos.")
 
-        aba_m1, aba_m2, aba_m3, aba_m4 = st.tabs(["🏢 Fundos Imobiliários", "📈 Ações da B3", "💵 Dólar & Exterior", "₿ Criptoativos"])
+        aba_m1, aba_m2, aba_m3, aba_m4 = st.tabs(["Fundos Imobiliários", "Ações da B3", "Dólar & Exterior", "Criptoativos"])
 
         fii_mercado = [
-            {"ticker": "MXRF11", "nome": "Maxi Renda FII", "classe": "FIIs", "preco_ref": 10.15, "motivo": "Maior número de cotistas da B3. Dividendos mensais consistentes (Yield ~11.5% a.a.).", "destaque": "💎 Queridinho dos Dividendos"},
-            {"ticker": "HGLG11", "nome": "CSHG Logística", "classe": "FIIs", "preco_ref": 160.50, "motivo": "Líder em galpões logísticos de alto padrão (AAA). Inquilinos de grande porte e vacância muito baixa.", "destaque": "🏢 Tijolo / Logística Premium"},
-            {"ticker": "XPML11", "nome": "XP Malls FII", "classe": "FIIs", "preco_ref": 112.00, "motivo": "Portfólio com os melhores shoppings do Brasil (Catarina Fashion, Cidade Jardim, etc.). Alta resiliência.", "destaque": "🛍️ Shoppings Consolidados"},
-            {"ticker": "BTLG11", "nome": "BTG Pactual Logística", "classe": "FIIs", "preco_ref": 100.80, "motivo": "Excelente gestão ativa e galpões próximos dos maiores centros de consumo de SP.", "destaque": "📦 Galpões Estratégicos"},
-            {"ticker": "KNCR11", "nome": "Kinea Rendimentos", "classe": "FIIs", "preco_ref": 103.50, "motivo": "Fundo de papel indexado 100% ao CDI. Protege seu capital e paga dividendos altos quando os juros estão altos.", "destaque": "🛡️ Proteção Indexada ao CDI"}
+            {"ticker": "MXRF11", "nome": "Maxi Renda FII", "classe": "FIIs", "preco_ref": 10.15, "motivo": "Maior número de cotistas da B3. Dividendos mensais consistentes (Yield ~11.5% a.a.).", "destaque": "Queridinho dos Dividendos"},
+            {"ticker": "HGLG11", "nome": "CSHG Logística", "classe": "FIIs", "preco_ref": 160.50, "motivo": "Líder em galpões logísticos de alto padrão (AAA). Inquilinos de grande porte e vacância muito baixa.", "destaque": "Tijolo / Logística Premium"},
+            {"ticker": "XPML11", "nome": "XP Malls FII", "classe": "FIIs", "preco_ref": 112.00, "motivo": "Portfólio com os melhores shoppings do Brasil (Catarina Fashion, Cidade Jardim, etc.). Alta resiliência.", "destaque": "Shoppings Consolidados"},
+            {"ticker": "BTLG11", "nome": "BTG Pactual Logística", "classe": "FIIs", "preco_ref": 100.80, "motivo": "Excelente gestão ativa e galpões próximos dos maiores centros de consumo de SP.", "destaque": "Galpões Estratégicos"},
+            {"ticker": "KNCR11", "nome": "Kinea Rendimentos", "classe": "FIIs", "preco_ref": 103.50, "motivo": "Fundo de papel indexado 100% ao CDI. Protege seu capital e paga dividendos altos quando os juros estão altos.", "destaque": "Proteção Indexada ao CDI"}
         ]
 
         acoes_mercado = [
-            {"ticker": "BBAS3", "nome": "Banco do Brasil", "classe": "Ações", "preco_ref": 27.50, "motivo": "Bancão muito lucrativo negociando com múltiplos baixos (P/L e P/VP com desconto histórico). Dividendos elevados.", "destaque": "💰 Bancão Barato / Dividendos"},
-            {"ticker": "PETR4", "nome": "Petrobras PN", "classe": "Ações", "preco_ref": 36.80, "motivo": "Geração de caixa massiva no pré-sal e distribuição frequente de dividendos expressivos.", "destaque": "⛽ Dividendos Massivos"},
-            {"ticker": "VALE3", "nome": "Vale", "classe": "Ações", "preco_ref": 62.00, "motivo": "Líder global em minério de ferro. Negociando em patamares atrativos de entrada com receita forte em dólar.", "destaque": "⛏️ Exportadora Global"},
-            {"ticker": "ITUB4", "nome": "Itaú Unibanco", "classe": "Ações", "preco_ref": 34.00, "motivo": "Maior banco privado da América Latina. Crescimento contínuo de lucro e rentabilidade (ROE) impecável.", "destaque": "🏛️ Máxima Solidez e Lucro"},
-            {"ticker": "TAEE11", "nome": "Taesa Transmissão", "classe": "Ações", "preco_ref": 35.50, "motivo": "Receita previsível corrigida por inflação (IPCA/IGP-M). Modelo de negócios seguro para quem busca renda passiva.", "destaque": "⚡ Energia Perene / Renda Passiva"}
+            {"ticker": "BBAS3", "nome": "Banco do Brasil", "classe": "Ações", "preco_ref": 27.50, "motivo": "Bancão muito lucrativo negociando com múltiplos baixos (P/L e P/VP com desconto histórico). Dividendos elevados.", "destaque": "Bancão Barato / Dividendos"},
+            {"ticker": "PETR4", "nome": "Petrobras PN", "classe": "Ações", "preco_ref": 36.80, "motivo": "Geração de caixa massiva no pré-sal e distribuição frequente de dividendos expressivos.", "destaque": "Dividendos Massivos"},
+            {"ticker": "VALE3", "nome": "Vale", "classe": "Ações", "preco_ref": 62.00, "motivo": "Líder global em minério de ferro. Negociando em patamares atrativos de entrada com receita forte em dólar.", "destaque": "Exportadora Global"},
+            {"ticker": "ITUB4", "nome": "Itaú Unibanco", "classe": "Ações", "preco_ref": 34.00, "motivo": "Maior banco privado da América Latina. Crescimento contínuo de lucro e rentabilidade (ROE) impecável.", "destaque": "Máxima Solidez e Lucro"},
+            {"ticker": "TAEE11", "nome": "Taesa Transmissão", "classe": "Ações", "preco_ref": 35.50, "motivo": "Receita previsível corrigida por inflação (IPCA/IGP-M). Modelo de negócios seguro para quem busca renda passiva.", "destaque": "Energia Perene / Renda Passiva"}
         ]
 
         moedas_mercado = [
-            {"ticker": "USD", "nome": "Dólar Comercial", "classe": "Dólar", "preco_ref": 5.45, "motivo": "Moeda de reserva mundial. Comprar dólar fracionado para conta Nomad protege seu patrimônio contra a desvalorização do Real.", "destaque": "💵 Proteção Cambial Nomad"},
-            {"ticker": "IVVB11", "nome": "iShares S&P 500", "classe": "Internacional", "preco_ref": 320.00, "motivo": "ETF negociado na B3 que investe nas 500 maiores empresas dos Estados Unidos (Apple, Microsoft, Google, etc.).", "destaque": "🌐 Top 500 Empresas dos EUA"}
+            {"ticker": "USD", "nome": "Dólar Comercial", "classe": "Dólar", "preco_ref": 5.45, "motivo": "Moeda de reserva mundial. Comprar dólar fracionado para conta Nomad protege seu patrimônio contra a desvalorização do Real.", "destaque": "Proteção Cambial Nomad"},
+            {"ticker": "IVVB11", "nome": "iShares S&P 500", "classe": "Internacional", "preco_ref": 320.00, "motivo": "ETF negociado na B3 que investe nas 500 maiores empresas dos Estados Unidos (Apple, Microsoft, Google, etc.).", "destaque": "Top 500 Empresas dos EUA"}
         ]
 
         criptos_mercado = [
-            {"ticker": "BTC", "nome": "Bitcoin", "classe": "Cripto", "preco_ref": 380000.0, "motivo": "Ativo mais escasso do mundo com limite de 21 milhões de moedas. Excelente para aportes mensais de longo prazo.", "destaque": "₿ Reserva de Valor Digital"},
-            {"ticker": "SOL", "nome": "Solana", "classe": "Cripto", "preco_ref": 950.0, "motivo": "Blockchain ultrarrápida com crescimento exponencial em finanças descentralizadas e aplicações.", "destaque": "⚡ Alta Velocidade e Adoção"},
-            {"ticker": "ETH", "nome": "Ethereum", "classe": "Cripto", "preco_ref": 15000.0, "motivo": "A maior plataforma de contratos inteligentes e tokenização do mercado cripto.", "destaque": "🌐 Líder em Contratos Inteligentes"}
+            {"ticker": "BTC", "nome": "Bitcoin", "classe": "Cripto", "preco_ref": 380000.0, "motivo": "Ativo mais escasso do mundo com limite de 21 milhões de moedas. Excelente para aportes mensais de longo prazo.", "destaque": "Reserva de Valor Digital"},
+            {"ticker": "SOL", "nome": "Solana", "classe": "Cripto", "preco_ref": 950.0, "motivo": "Blockchain ultrarrápida com crescimento exponencial em finanças descentralizadas e aplicações.", "destaque": "Alta Velocidade e Adoção"},
+            {"ticker": "ETH", "nome": "Ethereum", "classe": "Cripto", "preco_ref": 15000.0, "motivo": "A maior plataforma de contratos inteligentes e tokenização do mercado cripto.", "destaque": "Líder em Contratos Inteligentes"}
         ]
 
         def _render_lista_radar(itens):
@@ -2174,7 +2290,7 @@ elif menu == "Minha Carteira":
                         md(f"<div><span class='cell-l'>COTAÇÃO ESTIMADA</span><br><b style='font-size:1.15rem;color:#2563EB;font-variant-numeric:tabular-nums'>{fmt_moeda(preco_exibir, casas_p)}</b></div>")
 
                     with c_r3:
-                        with st.popover("➕ Adicionar", use_container_width=True):
+                        with st.popover("Adicionar", use_container_width=True):
                             st.markdown(f"**Registrar {op['ticker']}**")
                             q_add = st.number_input("Quantidade comprada", min_value=0.0001, value=10.0 if op["classe"] in ("Ações", "FIIs") else 1.0, key=f"q_rd_{op['ticker']}")
                             p_add = st.number_input("Preço pago (R$)", min_value=0.01, value=float(preco_exibir), key=f"p_rd_{op['ticker']}")
@@ -2182,7 +2298,7 @@ elif menu == "Minha Carteira":
                                 somar_ou_adicionar_ativo({
                                     "id": novo_id(), "ticker": op["ticker"], "nome": op["nome"], "classe": op["classe"],
                                     "qtd": float(q_add), "pm": float(p_add), "preco_atual": float(preco_exibir),
-                                    "data_compra": date.today().strftime("%Y-%m-%d")
+                                    "data_compra": hoje_br().strftime("%Y-%m-%d")
                                 })
                                 salvar_dados(db)
                                 st.toast(f"{op['ticker']} adicionado à sua carteira com sucesso!", icon="✅")
@@ -2226,7 +2342,7 @@ elif menu == "Minha Carteira":
             cor_usd = "#15803D" if res_usd >= 0 else "#B91C1C"
             md(f"""
             <div style="background:linear-gradient(135deg,#ECFEFF,#FFFFFF 70%);border:1px solid #A5F3FC;border-radius:18px;padding:18px 24px;margin-bottom:1.3rem;box-shadow:0 1px 3px rgba(11,18,32,.05)">
-              <div style="font-size:.76rem;font-weight:800;color:#0E7490;margin-bottom:12px;letter-spacing:.1em;text-transform:uppercase">💵 Meus dólares (Nomad)</div>
+              <div style="font-size:.76rem;font-weight:800;color:#0E7490;margin-bottom:12px;letter-spacing:.1em;text-transform:uppercase">Meus dólares (Nomad)</div>
               <div style="display:flex;gap:40px;flex-wrap:wrap">
                 <div><div style="font-size:1.45rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">US$ {fmt_num(usd_total)}</div><div class="stat-l">Total em dólar</div></div>
                 <div><div style="font-size:1.45rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">{fmt_moeda(cot_media, 4)}</div><div class="stat-l">Cotação média que paguei</div></div>
@@ -2236,7 +2352,7 @@ elif menu == "Minha Carteira":
             </div>
             """)
 
-        with st.expander("➕ Registrar compra de criptomoeda (Bitcoin, Solana...)", expanded=df_alt.empty):
+        with st.expander("Registrar compra de criptomoeda (Bitcoin, Solana...)", expanded=df_alt.empty):
             with st.form("form_nova_cripto", clear_on_submit=True):
                 k1, k2, k3 = st.columns(3)
                 moeda_sel = k1.selectbox("Criptomoeda", ["BTC", "SOL", "XRP", "LTC", "DOGE", "USDT", "USDC", "ADA", "BNB", "Outra"])
@@ -2246,7 +2362,7 @@ elif menu == "Minha Carteira":
                 k4, k5, k6 = st.columns(3)
                 total_pago_cripto = k4.number_input("Total pago na compra (R$)", min_value=0.0, value=500.0, step=50.0)
                 preco_un_cripto = k5.number_input("OU preço por unidade (R$)", min_value=0.0, value=0.0, step=1000.0)
-                data_cripto = k6.date_input("Data da compra", value=date.today(), format="DD/MM/YYYY", key="dt_cripto")
+                data_cripto = k6.date_input("Data da compra", value=hoje_br(), format="DD/MM/YYYY", key="dt_cripto")
 
                 corretora_cripto = st.text_input("Corretora / Exchange", placeholder="Ex: Binance, Mercado Bitcoin, Nomad").strip()
 
@@ -2273,7 +2389,7 @@ elif menu == "Minha Carteira":
 
         cot_inicial = cotacao_dolar()
         cot_default = float(cot_inicial["preco"]) if cot_inicial else 5.00
-        with st.expander("➕ Registrar compra de dólar (Nomad)", expanded=False):
+        with st.expander("Registrar compra de dólar (Nomad)", expanded=False):
             with st.form("form_novo_dolar", clear_on_submit=True):
                 u1, u2, u3 = st.columns(3)
                 usd_comprado = u1.number_input("Quantos dólares comprei (US$)", min_value=0.01, value=100.00, step=10.0)
@@ -2281,7 +2397,7 @@ elif menu == "Minha Carteira":
                 taxas_usd = u3.number_input("Taxas / IOF pagos (R$)", min_value=0.0, value=0.0, step=1.0)
 
                 u4, u5 = st.columns(2)
-                data_usd = u4.date_input("Data da compra", value=date.today(), format="DD/MM/YYYY", key="dt_usd")
+                data_usd = u4.date_input("Data da compra", value=hoje_br(), format="DD/MM/YYYY", key="dt_usd")
                 corretora_usd = u5.text_input("Onde comprou", value="Nomad").strip()
 
                 if st.form_submit_button("Salvar compra de dólar", use_container_width=True, type="primary"):
@@ -2299,12 +2415,12 @@ elif menu == "Minha Carteira":
                     st.rerun()
 
         if df_alt.empty:
-            vazio("Nenhuma cripto ou dólar registrado.", "₿")
+            vazio("Nenhuma cripto ou dólar registrado.")
         else:
             listar_ativos(df_alt)
 
     with aba_caixinhas:
-        hoje = date.today()
+        hoje = hoje_br()
         movs_todas = db.get("caixinhas_mov", [])
 
         md(f"""
@@ -2315,7 +2431,7 @@ elif menu == "Minha Carteira":
         </div>
         """)
 
-        with st.expander("➕ Criar nova caixinha"):
+        with st.expander("Criar nova caixinha"):
             with st.form("form_nova_caixinha", clear_on_submit=True):
                 cx1, cx2 = st.columns(2)
                 nome_cx = cx1.text_input("Nome da Caixinha", placeholder="Ex: Fluxo do Mês, Reserva de Emergência, Viagem").strip()
@@ -2328,7 +2444,7 @@ elif menu == "Minha Carteira":
                 if st.form_submit_button("Criar caixinha", use_container_width=True, type="primary"):
                     if nome_cx:
                         novo_cx_id = novo_id()
-                        hoje_s = date.today().strftime("%Y-%m-%d")
+                        hoje_s = hoje_br().strftime("%Y-%m-%d")
                         db.setdefault("caixinhas", []).append({
                             "id": novo_cx_id, "nome": nome_cx.title(), "banco": banco_cx.title() if banco_cx else "Nubank",
                             "saldo": float(saldo_inicial_cx) + float(rendimento_cx), "guardado_inicial": float(saldo_inicial_cx),
@@ -2342,7 +2458,7 @@ elif menu == "Minha Carteira":
                         st.rerun()
 
         if not caixinhas_lista:
-            vazio("Nenhuma caixinha criada ainda. Crie sua primeira caixinha no botão acima!", "📦")
+            vazio("Nenhuma caixinha criada ainda. Crie sua primeira caixinha no botão acima!")
         else:
             for cx in caixinhas_lista:
                 saldo_cx = float(cx.get("saldo", 0.0))
@@ -2357,12 +2473,12 @@ elif menu == "Minha Carteira":
                     with col_card:
                         md(f"""
                         <div>
-                          <div class="asset-tk">📦 {html.escape(cx['nome'])} <span class="chip chip-caixinhas">{html.escape(cx.get('banco', 'Banco'))}</span></div>
+                          <div class="asset-tk">{html.escape(cx['nome'])} <span class="chip chip-caixinhas">{html.escape(cx.get('banco', 'Banco'))}</span></div>
                           <div style="font-size:1.7rem;font-weight:900;color:#15803D;margin:4px 0;letter-spacing:-.03em;font-variant-numeric:tabular-nums">{fmt_moeda(saldo_cx)}</div>
                           <div style="display:flex;gap:18px;font-size:.8rem;color:#64748B;flex-wrap:wrap">
-                            <span>⬆️ Guardei: <b>{fmt_moeda(tot_g)}</b></span>
-                            <span>⬇️ Retirei: <b>{fmt_moeda(tot_r)}</b></span>
-                            <span>📈 Rendimento: <b>{fmt_moeda(tot_rend)}</b></span>
+                            <span>Guardado: <b>{fmt_moeda(tot_g)}</b></span>
+                            <span>Retirado: <b>{fmt_moeda(tot_r)}</b></span>
+                            <span>Rendimento: <b>{fmt_moeda(tot_rend)}</b></span>
                           </div>
                         </div>
                         """)
@@ -2375,7 +2491,7 @@ elif menu == "Minha Carteira":
                                 st.markdown(f"**Guardar na caixinha {cx['nome']}**")
                                 tipo_g = st.radio("Tipo", ["Depósito", "Rendimento"], horizontal=True, key=f"tipo_g_{cx['id']}")
                                 val_guardar = st.number_input("Valor (R$)", min_value=0.01, value=100.0, step=50.0, key=f"g_cx_{cx['id']}")
-                                dt_g = st.date_input("Data", value=date.today(), format="DD/MM/YYYY", key=f"dt_g_{cx['id']}")
+                                dt_g = st.date_input("Data", value=hoje_br(), format="DD/MM/YYYY", key=f"dt_g_{cx['id']}")
                                 obs_g = st.text_input("Observação (opcional)", key=f"obs_g_{cx['id']}")
                                 if st.button("Confirmar Entrada", key=f"btn_g_cx_{cx['id']}", type="primary", use_container_width=True):
                                     cx["saldo"] = float(cx.get("saldo", 0.0)) + float(val_guardar)
@@ -2390,7 +2506,7 @@ elif menu == "Minha Carteira":
                             with st.popover("➖", use_container_width=True, help="Retirar dinheiro"):
                                 st.markdown(f"**Retirar da caixinha {cx['nome']}**")
                                 val_retirar = st.number_input("Valor (R$)", min_value=0.01, max_value=max(0.01, saldo_cx), value=min(100.0, max(0.01, saldo_cx)), step=50.0, key=f"r_cx_{cx['id']}")
-                                dt_r = st.date_input("Data", value=date.today(), format="DD/MM/YYYY", key=f"dt_r_{cx['id']}")
+                                dt_r = st.date_input("Data", value=hoje_br(), format="DD/MM/YYYY", key=f"dt_r_{cx['id']}")
                                 obs_r = st.text_input("Motivo (opcional)", key=f"obs_r_{cx['id']}")
                                 if st.button("Confirmar Saída", key=f"btn_r_cx_{cx['id']}", type="primary", use_container_width=True):
                                     cx["saldo"] = max(0.0, float(cx.get("saldo", 0.0)) - float(val_retirar))
@@ -2407,7 +2523,7 @@ elif menu == "Minha Carteira":
                                 if st.button("Salvar Edição", key=f"btn_e_cx_{cx['id']}", type="primary", use_container_width=True):
                                     diff = float(ed_sal_cx) - float(cx.get("saldo", 0.0))
                                     if abs(diff) > 0.005:
-                                        registrar_mov_caixinha(cx["id"], "entrada" if diff > 0 else "saida", abs(diff), date.today().strftime("%Y-%m-%d"), "Ajuste manual")
+                                        registrar_mov_caixinha(cx["id"], "entrada" if diff > 0 else "saida", abs(diff), hoje_br().strftime("%Y-%m-%d"), "Ajuste manual")
                                     cx["nome"] = ed_nom_cx.title()
                                     cx["banco"] = ed_bco_cx.title()
                                     cx["saldo"] = float(ed_sal_cx)
@@ -2425,7 +2541,7 @@ elif menu == "Minha Carteira":
     with aba_vendas:
         lista_vendas = db.get("vendas", [])
         if not lista_vendas:
-            vazio("Nenhuma venda de ativos registrada ainda.", "💸")
+            vazio("Nenhuma venda de ativos registrada ainda.")
         else:
             for v in reversed(lista_vendas):
                 lucro_v = v["lucro_reais"]
@@ -2446,7 +2562,7 @@ elif menu == "Minha Carteira":
 elif menu == "Dividendos":
     hero("Agenda de Dividendos & Proventos", "Controle de proventos com cálculo automático e confirmação de recebimento.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
     m_p = c1.selectbox("Mês", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="m_prov")
     a_p = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="a_prov")
@@ -2454,7 +2570,7 @@ elif menu == "Dividendos":
 
     col_auto, col_man = st.columns([2, 1], vertical_alignment="center")
     with col_auto:
-        if st.button("⚡ Sincronizar dividendos da minha carteira", type="primary", use_container_width=True):
+        if st.button("Sincronizar dividendos da minha carteira", type="primary", use_container_width=True):
             qtd_adicionados = sincronizar_dividendos_carteira(m_p, a_p)
             if qtd_adicionados > 0:
                 st.toast(f"{qtd_adicionados} provento(s) adicionados para {MESES_PT[m_p-1]}!", icon="📈")
@@ -2463,20 +2579,20 @@ elif menu == "Dividendos":
             st.rerun()
 
     with col_man:
-        with st.popover("➕ Lançar manualmente", use_container_width=True):
+        with st.popover("Lançar manualmente", use_container_width=True):
             with st.form("form_novo_prov_man", clear_on_submit=True):
-                dt_pagamento = st.date_input("Data de Pagamento", value=date.today(), format="DD/MM/YYYY")
+                dt_pagamento = st.date_input("Data de Pagamento", value=hoje_br(), format="DD/MM/YYYY")
                 lista_tickers = [a["ticker"] for a in db["ativos"] if a["classe"] in ("Ações", "FIIs", "Renda Fixa", "Internacional")] or ["Outro"]
                 tick_p = st.selectbox("Ativo", lista_tickers)
                 tipo_p = st.selectbox("Tipo de Provento", ["Rendimento FII", "Dividendo / JCP", "Juros Renda Fixa", "Outro"])
                 val_total = st.number_input("Valor a Receber (R$)", min_value=0.01, value=50.0, step=1.0)
-                status_p = st.selectbox("Status", ["⏳ Previsto (A Receber)", "✅ Já Caiu na Conta"])
+                status_p = st.selectbox("Status", ["Previsto (a receber)", "Já caiu na conta"])
 
                 if st.form_submit_button("Salvar provento", use_container_width=True, type="primary"):
                     db["proventos"].append({
                         "id": int(datetime.now().timestamp() * 1000), "data": dt_pagamento.strftime("%Y-%m-%d"),
                         "ticker": tick_p, "valor": float(val_total), "tipo": tipo_p,
-                        "status": "recebido" if "Já Caiu" in status_p else "previsto"
+                        "status": "recebido" if "Já caiu" in status_p else "previsto"
                     })
                     salvar_dados(db)
                     st.toast("Provento registrado!", icon="💰")
@@ -2495,19 +2611,19 @@ elif menu == "Dividendos":
     """)
 
     if not prov_mes:
-        vazio(f"Nenhum dividendo agendado para {MESES_PT[m_p-1]}/{a_p}. Clique no botão acima para sincronizar!", "💰")
+        vazio(f"Nenhum dividendo agendado para {MESES_PT[m_p-1]}/{a_p}. Clique no botão acima para sincronizar!")
     else:
         for r in prov_mes:
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns([1.5, 1.4, 1.3, 0.4], vertical_alignment="center")
-                c1.markdown(f"<div class='asset-tk'>{r['ticker']}</div><div class='asset-sub'>🗓️ {datetime.strptime(r['data'], '%Y-%m-%d').strftime('%d/%m/%Y')} · {r['tipo']}</div>", unsafe_allow_html=True)
+                c1.markdown(f"<div class='asset-tk'>{r['ticker']}</div><div class='asset-sub'>{datetime.strptime(r['data'], '%Y-%m-%d').strftime('%d/%m/%Y')} · {r['tipo']}</div>", unsafe_allow_html=True)
                 c2.markdown(f"<span style='font-size:1.2rem;font-weight:800;color:#0B1220;font-variant-numeric:tabular-nums'>{fmt_moeda(r['valor'])}</span>", unsafe_allow_html=True)
 
                 with c3:
                     if r["status"] == "recebido":
                         md("<span class='badge-status status-alta'>Já caiu na conta</span>")
                     else:
-                        if st.button("Confirmar que caiu ✅", key=f"conf_{r['id']}", use_container_width=True):
+                        if st.button("Confirmar recebimento", key=f"conf_{r['id']}", use_container_width=True):
                             r["status"] = "recebido"
                             salvar_dados(db)
                             st.toast("Recebimento confirmado!", icon="💰")
@@ -2525,7 +2641,7 @@ elif menu == "Dividendos":
 elif menu == "Cartão de Crédito":
     hero("Faturas & Cartão de Crédito", "Fechamento dia 15 e vencimento dia 22. Clique no mês desejado para ver a fatura na hora.")
 
-    hoje = date.today()
+    hoje = hoje_br()
 
     if "fatura_mes_num" not in st.session_state:
         st.session_state["fatura_mes_num"] = hoje.month
@@ -2555,7 +2671,7 @@ elif menu == "Cartão de Crédito":
     fatura_chave_sel = f"{ano_sel:04d}-{mes_sel:02d}"
     mes_fat_nome = MESES_PT[mes_sel - 1]
 
-    with st.expander("➕ Lançar nova compra no cartão de crédito"):
+    with st.expander("Lançar nova compra no cartão de crédito"):
         with st.form("form_compra_cartao", clear_on_submit=True):
             f_c1, f_c2, f_c3 = st.columns(3)
             desc_compra = f_c1.text_input("Nome da Compra / Loja", placeholder="Ex: Celular, Zara, Curso").strip()
@@ -2569,7 +2685,7 @@ elif menu == "Cartão de Crédito":
             cashback_compra = f_c7.number_input("Cashback Ganho (R$)", min_value=0.0, value=0.0, step=0.50)
 
             f_c8, f_c9, f_c10 = st.columns([1.2, 1.4, 1.4])
-            dt_compra = f_c8.date_input("Data da Compra", value=date.today(), format="DD/MM/YYYY")
+            dt_compra = f_c8.date_input("Data da Compra", value=hoje_br(), format="DD/MM/YYYY")
 
             mes_sug = dt_compra.month + (1 if dt_compra.day >= 15 else 0)
             ano_sug = dt_compra.year + (1 if mes_sug > 12 else 0)
@@ -2669,7 +2785,7 @@ elif menu == "Cartão de Crédito":
                                   hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>")
         st.plotly_chart(fig_faturas, use_container_width=True, config=CONFIG_PLOTLY)
 
-        md("<div style='font-weight:700;color:#334155;margin:10px 0 6px;font-size:.88rem'>👇 Clique no mês para abrir a fatura na hora:</div>")
+        md("<div style='font-weight:700;color:#334155;margin:10px 0 6px;font-size:.88rem'>Selecione o mês para abrir a fatura na hora:</div>")
         chaves_botoes = [k for k in sorted(projecao_meses.keys())
                          if k >= fatura_atual_real_chave and int(k.split("-")[0]) in anos_opcoes][:12]
         for i in range(0, len(chaves_botoes), 6):
@@ -2688,7 +2804,7 @@ elif menu == "Cartão de Crédito":
 
     secao(f"Compras e parcelas na fatura de {mes_fat_nome}/{ano_sel}")
     if not compras_do_mes:
-        vazio(f"Nenhuma compra cai na fatura de {mes_fat_nome}/{ano_sel}.", "💳")
+        vazio(f"Nenhuma compra cai na fatura de {mes_fat_nome}/{ano_sel}.")
     else:
         for item in compras_do_mes:
             with st.container(border=True):
@@ -2732,14 +2848,14 @@ elif menu == "Cartão de Crédito":
 elif menu == "Conta & Débito":
     hero("Extrato de Conta & Débito", "Controle tudo o que entra e sai da sua conta à vista: salário, vale, PIX e débito.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     c1, c2 = st.columns([2.5, 1])
     mes_deb = c1.selectbox("Mês do Extrato", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="deb_mes")
     ano_deb = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="deb_ano")
     chave_deb_sel = f"{ano_deb:04d}-{mes_deb:02d}"
     nome_mes_deb = MESES_PT[mes_deb - 1]
 
-    with st.expander("➕ Lançar nova movimentação (entrada ou saída)"):
+    with st.expander("Lançar nova movimentação (entrada ou saída)"):
         with st.form("form_nova_transacao", clear_on_submit=True):
             t1, t2 = st.columns(2)
             tipo_transacao = t1.radio("Tipo:", ["Entrada (+)", "Saída (-)"], horizontal=True)
@@ -2748,7 +2864,7 @@ elif menu == "Conta & Débito":
             t3, t4, t5 = st.columns(3)
             val_transacao = t3.number_input("Valor (R$)", min_value=0.01, value=150.0, step=10.0)
             cat_transacao = t4.selectbox("Categoria", LISTA_CATEGORIAS_DEBITO)
-            dt_transacao = t5.date_input("Data da Operação", value=date.today(), format="DD/MM/YYYY")
+            dt_transacao = t5.date_input("Data da Operação", value=hoje_br(), format="DD/MM/YYYY")
 
             if st.form_submit_button("Lançar na conta", use_container_width=True, type="primary"):
                 if desc_transacao:
@@ -2778,7 +2894,7 @@ elif menu == "Conta & Débito":
 
     secao(f"Extrato de movimentações — {nome_mes_deb}/{ano_deb}")
     if not transacoes_mes:
-        vazio(f"Nenhuma movimentação lançada em {nome_mes_deb}/{ano_deb}.", "🏦")
+        vazio(f"Nenhuma movimentação lançada em {nome_mes_deb}/{ano_deb}.")
     else:
         for t in reversed(transacoes_mes):
             eh_ent = t["tipo"] == "Entrada (+)"
@@ -2818,16 +2934,16 @@ elif menu == "Conta & Débito":
 # TELA: DEVEDORES
 # ==============================================================================
 elif menu == "Devedores":
-    hero("Devedores & Valores a Receber", "Cálculo real de meses decorridos, parcelas vencidas e controle de cobranças.")
+    hero("Devedores & Valores a Receber", "Controle de parcelas, vencimentos e pagamentos recebidos. O atraso é calculado sempre pela data de vencimento de cada parcela.")
 
-    hoje = date.today()
+    hoje = hoje_br()
     nomes_cadastrados = sorted(list(set(d["nome"].strip().title() for d in db.get("devedores", []))))
 
-    with st.expander("➕ Adicionar nova cobrança / empréstimo", expanded=not db.get("devedores", [])):
+    with st.expander("Adicionar nova cobrança / empréstimo", expanded=not db.get("devedores", [])):
         with st.form("form_novo_devedor", clear_on_submit=True):
             c1_nome, c2_nome = st.columns(2)
-            nome_escolhido = c1_nome.selectbox("👤 Escolher Pessoa Já Cadastrada:", ["-- Nenhuma (Digitar ao lado) --"] + nomes_cadastrados if nomes_cadastrados else ["Nenhuma cadastrada"])
-            nome_digitado = c2_nome.text_input("➕ OU Digite o Nome de uma Nova Pessoa:", placeholder="Ex: Rafael, Julia").strip()
+            nome_escolhido = c1_nome.selectbox("Escolher pessoa já cadastrada", ["-- Nenhuma (digitar ao lado) --"] + nomes_cadastrados if nomes_cadastrados else ["Nenhuma cadastrada"])
+            nome_digitado = c2_nome.text_input("Ou digite o nome de uma nova pessoa", placeholder="Ex: Rafael, Julia").strip()
 
             d1, d2 = st.columns(2)
             desc_p = d1.text_input("Descrição do que foi", placeholder="Ex: Óculos, Celular, Camisa").strip()
@@ -2837,20 +2953,19 @@ elif menu == "Devedores":
             val_p = d3.number_input("Valor Total (R$)", min_value=1.0, value=1305.60, step=50.0)
             parc_total = d4.number_input("Número de Parcelas", min_value=1, max_value=60, value=6, step=1)
             val_parc_manual = d5.number_input("Valor de cada Parcela (R$)", min_value=0.0, value=217.60, step=10.0)
-            valor_ja_pago_inicial = d6.number_input("Quanto ela JÁ PAGOU (R$)?", min_value=0.0, value=0.0, step=50.0)
+            valor_ja_pago_inicial = d6.number_input("Quanto já pagou (R$)", min_value=0.0, value=0.0, step=50.0)
 
             d7, d8 = st.columns(2)
-            data_emp = d7.date_input("Data de Início", value=date.today(), format="DD/MM/YYYY")
-            dia_venc_mes = d8.number_input("Dia do Vencimento no Mês", min_value=1, max_value=31, value=20, step=1)
+            data_emp = d7.date_input("Data de início", value=hoje, format="DD/MM/YYYY")
+            data_venc1 = d8.date_input("Data do 1º vencimento", value=hoje, format="DD/MM/YYYY",
+                                       help="As demais parcelas vencem no mesmo dia dos meses seguintes. O atraso só começa depois dessa data.")
 
             if st.form_submit_button("Cadastrar cobrança", use_container_width=True, type="primary"):
-                nome_final = nome_digitado.title() if nome_digitado else (nome_escolhido.strip().title() if nome_escolhido not in ["-- Nenhuma (Digitar ao lado) --", "Nenhuma cadastrada"] else None)
+                nome_final = nome_digitado.title() if nome_digitado else (nome_escolhido.strip().title() if nome_escolhido not in ["-- Nenhuma (digitar ao lado) --", "Nenhuma cadastrada"] else None)
                 if not nome_final:
                     st.error("Informe o nome da pessoa!")
                 else:
                     parc_calc = float(val_parc_manual) if val_parc_manual > 0 else (float(val_p) / int(parc_total))
-                    _, max_d = calendar.monthrange(data_emp.year, data_emp.month)
-                    dt_venc_calc = date(data_emp.year, data_emp.month, min(int(dia_venc_mes), max_d))
                     db.setdefault("devedores", []).append({
                         "id": int(datetime.now().timestamp() * 1000), "nome": nome_final,
                         "descricao": desc_p if desc_p else "Empréstimo", "forma": forma_p,
@@ -2858,7 +2973,8 @@ elif menu == "Devedores":
                         "valor_parcela": float(parc_calc), "total_pago_reais": float(valor_ja_pago_inicial),
                         "parcelas_pagas": int(float(valor_ja_pago_inicial) / parc_calc) if parc_calc > 0 else 0,
                         "data_emprestimo": data_emp.strftime("%Y-%m-%d"),
-                        "data_vencimento": dt_venc_calc.strftime("%Y-%m-%d"),
+                        "data_vencimento": data_venc1.strftime("%Y-%m-%d"),
+                        "dia_vencimento": int(data_venc1.day),
                         "pagamentos": [], "status": "quitado" if float(valor_ja_pago_inicial) >= float(val_p) - 0.05 else "pendente"
                     })
                     salvar_dados(db)
@@ -2867,7 +2983,7 @@ elif menu == "Devedores":
 
     devedores_lista = db.get("devedores", [])
     if not devedores_lista:
-        vazio("Ninguém está te devendo no momento.", "🤝")
+        vazio("Ninguém está te devendo no momento.")
     else:
         pessoas_agrupadas = {}
         for d in devedores_lista:
@@ -2875,11 +2991,12 @@ elif menu == "Devedores":
             pessoas_agrupadas.setdefault(n_pessoa, []).append(d)
 
         for nome_pessoa, dividas in sorted(pessoas_agrupadas.items()):
-            tot_falta = sum(calcular_atraso_real_divida(it)["falta_total"] for it in dividas)
-            tot_atraso = sum(calcular_atraso_real_divida(it)["valor_atraso"] for it in dividas)
+            infos_pessoa = [calcular_atraso_real_divida(it) for it in dividas]
+            tot_falta = sum(i["falta_total"] for i in infos_pessoa)
+            tot_atraso = sum(i["valor_atraso"] for i in infos_pessoa)
 
             with st.container():
-                cor_topo = "#B91C1C" if tot_atraso > 0 else ("#2563EB" if tot_falta > 0 else "#15803D")
+                cor_topo = "#B91C1C" if tot_atraso > 0.05 else ("#2563EB" if tot_falta > 0 else "#15803D")
                 md(f"""
                 <div class="person">
                   <div style="display:flex;align-items:center;gap:12px">
@@ -2894,89 +3011,150 @@ elif menu == "Devedores":
                     info = calcular_atraso_real_divida(dev)
                     forma_tag = dev.get("forma", "💳 Cartão de Crédito")
                     forma_class = "chip-cartao" if "Cartão" in forma_tag else "chip-pix"
-                    dt_emp_str = dev.get("data_emprestimo", dev.get("data", "2026-01-01"))
+                    forma_txt = "Cartão de crédito" if "Cartão" in forma_tag else "PIX / Dinheiro"
+                    dt_emp_obj = parse_data(dev.get("data_emprestimo", dev.get("data", "")), hoje)
 
                     with st.container(border=True):
-                        c_desc, c_parc, c_val, c_abater, c_acoes = st.columns([1.7, 1.3, 1.2, 1.3, 0.6], vertical_alignment="center")
+                        c_desc, c_parc, c_venc, c_abater, c_acoes = st.columns([1.8, 1.4, 1.3, 1.3, 0.8], vertical_alignment="center")
+
+                        # --- Descrição e situação ---
                         with c_desc:
                             md(f"""
                             <div>
-                              <div class="asset-tk">🛍️ {html.escape(dev['descricao'])} <span class="chip {forma_class}">{forma_tag}</span></div>
+                              <div class="asset-tk">{html.escape(dev['descricao'])} <span class="chip {forma_class}">{forma_txt}</span></div>
                               <div style="margin-top:5px">{info['badge']}</div>
-                              <div class="asset-sub" style="margin-top:4px">Início: {datetime.strptime(dt_emp_str, '%Y-%m-%d').strftime('%d/%m/%Y')} · {info['msg_detalhe']}</div>
+                              <div class="asset-sub" style="margin-top:4px">Início: {fmt_data(dt_emp_obj)} · {info['msg_detalhe']}</div>
                             </div>
                             """)
 
+                        # --- Parcelas e progresso ---
                         with c_parc:
                             if info["status"] == "quitado":
-                                md("<div style='font-size:.9rem;color:#15803D;font-weight:800'>100% PAGO</div>")
+                                md(f"""
+                                <div>
+                                  <div style='font-size:.9rem;color:#15803D;font-weight:800'>100% pago</div>
+                                  <div class='dv-meta'>Total recebido: {fmt_moeda(info['total_pago'])}</div>
+                                </div>
+                                """)
                             else:
                                 md(f"""
                                 <div>
                                   <div style="font-size:.95rem;font-weight:750;color:#2563EB">{dev['parcelas_total']}x de {fmt_moeda(info['v_parc'])}</div>
-                                  <div style="font-size:.82rem;color:#B91C1C;font-weight:750;margin-top:2px">Falta: {fmt_moeda(info['falta_total'])}</div>
-                                  <div style="font-size:.76rem;color:#15803D;font-weight:600;margin-top:2px">Já pago: {fmt_moeda(info['total_pago'])}</div>
+                                  <div class="prog-wrap prog-sm"><div class="prog-bar" style="width:{info['pct_pago']:.1f}%"></div></div>
+                                  <div class="dv-meta"><span class="dv-pos"><b>Pago {fmt_moeda(info['total_pago'])}</b></span> · <span class="dv-neg"><b>Falta {fmt_moeda(info['falta_total'])}</b></span></div>
                                 </div>
                                 """)
 
-                        with c_val:
+                        # --- Vencimento ---
+                        with c_venc:
                             if info["status"] == "quitado":
-                                md(f"<span style='font-size:.95rem;color:#15803D;font-weight:700'>Total: {fmt_moeda(info['total_pago'])}</span>")
-                            elif info["valor_atraso"] > 0:
+                                md("<div class='dv-meta'>Sem parcelas em aberto</div>")
+                            elif info["status"] == "atrasado":
                                 md(f"""
                                 <div>
-                                  <div style="font-size:1.05rem;font-weight:800;color:#B91C1C">Atraso: {fmt_moeda(info['parcela_mes'])}</div>
-                                  <div style="font-size:.78rem;color:#B91C1C;font-weight:600">Parcela do mês em atraso</div>
+                                  <div class="cell-l">Venceu em</div>
+                                  <div class="dv-due dv-neg">{fmt_data(info['proximo_venc'])}</div>
+                                  <div class="dv-meta dv-neg"><b>{info['dias_atraso']} dia(s) de atraso</b></div>
                                 </div>
                                 """)
                             else:
+                                txt_venc = "Vence hoje" if info["proximo_venc"] == hoje else f"Parcela de {fmt_moeda(info['parcela_mes'])}"
+                                cls_venc = "dv-warn" if info["proximo_venc"] == hoje else ""
                                 md(f"""
                                 <div>
-                                  <div style="font-size:1.05rem;font-weight:750;color:#15803D">Em dia</div>
-                                  <div style="font-size:.78rem;color:#64748B">Próxima: {fmt_moeda(info['v_parc'])}</div>
+                                  <div class="cell-l">Próximo vencimento</div>
+                                  <div class="dv-due">{fmt_data(info['proximo_venc'])}</div>
+                                  <div class="dv-meta {cls_venc}">{txt_venc}</div>
                                 </div>
                                 """)
 
+                        # --- Registrar pagamento (data + valor que a pessoa pagou) ---
                         with c_abater:
                             if info["status"] != "quitado":
-                                with st.popover("💰 Abater pagto", use_container_width=True):
-                                    v_abt = st.number_input("Valor recebido (R$)", min_value=0.01, value=float(info["valor_atraso"] if info["valor_atraso"] > 0 else min(info["falta_total"], info["v_parc"])), key=f"abt_{dev['id']}")
-                                    dt_abt = st.date_input("Data do recebimento", value=date.today(), format="DD/MM/YYYY", key=f"dt_abt_{dev['id']}")
-                                    if st.button("Confirmar Abatimento", key=f"btn_abt_{dev['id']}", type="primary"):
-                                        novo_p = info["total_pago"] + float(v_abt)
-                                        dev["total_pago_reais"] = float(novo_p)
-                                        dev.setdefault("pagamentos", []).append({"data": dt_abt.strftime("%Y-%m-%d"), "valor": float(v_abt)})
-                                        dev["parcelas_pagas"] = int(novo_p / info["v_parc"]) if info["v_parc"] > 0 else 0
-                                        if novo_p >= info["total_contratado"] - 0.05:
-                                            dev["status"] = "quitado"
+                                with st.popover("Registrar pagamento", use_container_width=True):
+                                    st.markdown("**Pagamento recebido**")
+                                    sugerido = info["valor_atraso"] if info["valor_atraso"] > 0.05 else info["v_parc"]
+                                    sugerido = max(0.01, min(float(sugerido), float(info["falta_total"])))
+                                    v_abt = st.number_input("Valor que a pessoa pagou (R$)", min_value=0.01,
+                                                            max_value=max(0.01, float(info["falta_total"])), value=float(sugerido),
+                                                            step=10.0, key=f"abt_{dev['id']}")
+                                    dt_abt = st.date_input("Data do pagamento", value=hoje, format="DD/MM/YYYY", key=f"dt_abt_{dev['id']}")
+                                    obs_abt = st.text_input("Observação (opcional)", key=f"obs_abt_{dev['id']}", placeholder="Ex: PIX, dinheiro...")
+                                    if st.button("Confirmar pagamento", key=f"btn_abt_{dev['id']}", type="primary", use_container_width=True):
+                                        dev.setdefault("pagamentos", []).append({
+                                            "id": novo_id(), "data": dt_abt.strftime("%Y-%m-%d"),
+                                            "valor": float(v_abt), "obs": obs_abt.strip()
+                                        })
+                                        dev["total_pago_reais"] = float(info["total_pago"]) + float(v_abt)
+                                        reavaliar_status_divida(dev)
                                         salvar_dados(db)
-                                        st.toast("Valor abatido!", icon="💰")
+                                        st.toast("Pagamento registrado!", icon="💰")
                                         st.rerun()
 
+                        # --- Editar / excluir ---
                         with c_acoes:
                             col_ed, col_dl = st.columns(2)
                             with col_ed:
-                                with st.popover("✏️", use_container_width=True):
+                                with st.popover("✏️", use_container_width=True, help="Editar cobrança"):
+                                    st.markdown("**Editar cobrança**")
                                     ed_n = st.text_input("Nome", value=dev["nome"], key=f"ed_n_{dev['id']}")
                                     ed_d = st.text_input("Descrição", value=dev["descricao"], key=f"ed_d_{dev['id']}")
-                                    ed_v = st.number_input("Total (R$)", value=float(dev["valor_total"]), key=f"ed_v_{dev['id']}")
-                                    ed_vp = st.number_input("Valor Parcela", value=float(info["v_parc"]), key=f"ed_vp_{dev['id']}")
-                                    ed_pg = st.number_input("Total JÁ PAGO (R$)", value=float(info["total_pago"]), key=f"ed_pg_{dev['id']}")
-                                    if st.button("Salvar", key=f"btn_e_dev_{dev['id']}", type="primary"):
+                                    ed_v = st.number_input("Total (R$)", min_value=0.01, value=float(dev["valor_total"]), key=f"ed_v_{dev['id']}")
+                                    ed_np = st.number_input("Número de parcelas", min_value=1, max_value=60, value=int(dev.get("parcelas_total", 1)), step=1, key=f"ed_np_{dev['id']}")
+                                    ed_vp = st.number_input("Valor da parcela (R$)", min_value=0.0, value=float(info["v_parc"]), key=f"ed_vp_{dev['id']}")
+                                    ed_dt1 = st.date_input("Data do 1º vencimento", value=info["primeiro_venc"], format="DD/MM/YYYY", key=f"ed_dt1_{dev['id']}")
+                                    ed_pg = st.number_input("Total já pago (R$)", min_value=0.0, value=float(info["total_pago"]), key=f"ed_pg_{dev['id']}")
+                                    if st.button("Salvar", key=f"btn_e_dev_{dev['id']}", type="primary", use_container_width=True):
                                         dev["nome"] = ed_n.title()
                                         dev["descricao"] = ed_d
                                         dev["valor_total"] = float(ed_v)
-                                        dev["valor_parcela"] = float(ed_vp)
+                                        dev["parcelas_total"] = int(ed_np)
+                                        dev["valor_parcela"] = float(ed_vp) if ed_vp > 0 else float(ed_v) / int(ed_np)
+                                        dev["data_vencimento"] = ed_dt1.strftime("%Y-%m-%d")
+                                        dev["dia_vencimento"] = int(ed_dt1.day)
                                         dev["total_pago_reais"] = float(ed_pg)
-                                        dev["parcelas_pagas"] = int(float(ed_pg) / float(ed_vp)) if float(ed_vp) > 0 else 0
+                                        reavaliar_status_divida(dev)
                                         salvar_dados(db)
                                         st.toast("Atualizado!")
                                         st.rerun()
                             with col_dl:
-                                if st.button("✕", key=f"del_dev_{dev['id']}"):
+                                if st.button("✕", key=f"del_dev_{dev['id']}", help="Excluir cobrança"):
                                     db["devedores"] = [x for x in db["devedores"] if x["id"] != dev["id"]]
                                     salvar_dados(db)
                                     st.rerun()
+
+                        # --- Histórico de pagamentos (editar data/valor ou apagar) ---
+                        pags = dev.get("pagamentos", [])
+                        if pags:
+                            with st.expander(f"Pagamentos recebidos ({len(pags)})"):
+                                ordenados = sorted(enumerate(pags), key=lambda x: str(x[1].get("data", "")))
+                                for i_pg, pg in ordenados:
+                                    p1, p2, p3, p4, p5 = st.columns([1.1, 1.2, 1.8, 0.9, 0.5], vertical_alignment="center")
+                                    p1.markdown(f"<div class='cell-v'>{fmt_data(parse_data(pg.get('data'), hoje))}</div>", unsafe_allow_html=True)
+                                    p2.markdown(f"<div class='cell-v dv-pos'>{fmt_moeda(float(pg.get('valor', 0.0)))}</div>", unsafe_allow_html=True)
+                                    p3.markdown(f"<div class='dv-meta'>{html.escape(str(pg.get('obs', '') or '—'))}</div>", unsafe_allow_html=True)
+                                    with p4:
+                                        with st.popover("Editar", use_container_width=True):
+                                            ep_v = st.number_input("Valor (R$)", min_value=0.01, value=max(0.01, float(pg.get("valor", 0.0))), step=10.0, key=f"ep_v_{dev['id']}_{i_pg}")
+                                            ep_d = st.date_input("Data", value=parse_data(pg.get("data"), hoje), format="DD/MM/YYYY", key=f"ep_d_{dev['id']}_{i_pg}")
+                                            ep_o = st.text_input("Observação", value=str(pg.get("obs", "") or ""), key=f"ep_o_{dev['id']}_{i_pg}")
+                                            if st.button("Salvar pagamento", key=f"ep_s_{dev['id']}_{i_pg}", type="primary", use_container_width=True):
+                                                dev["total_pago_reais"] = float(dev.get("total_pago_reais", 0.0)) - float(pg.get("valor", 0.0)) + float(ep_v)
+                                                pg["valor"] = float(ep_v)
+                                                pg["data"] = ep_d.strftime("%Y-%m-%d")
+                                                pg["obs"] = ep_o.strip()
+                                                reavaliar_status_divida(dev)
+                                                salvar_dados(db)
+                                                st.toast("Pagamento atualizado!")
+                                                st.rerun()
+                                    with p5:
+                                        if st.button("✕", key=f"ep_x_{dev['id']}_{i_pg}", help="Apagar este pagamento"):
+                                            dev["total_pago_reais"] = float(dev.get("total_pago_reais", 0.0)) - float(pg.get("valor", 0.0))
+                                            dev["pagamentos"].pop(i_pg)
+                                            reavaliar_status_divida(dev)
+                                            salvar_dados(db)
+                                            st.toast("Pagamento removido.")
+                                            st.rerun()
 
 # ==============================================================================
 # TELA: METAS
