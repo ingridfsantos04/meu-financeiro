@@ -620,14 +620,15 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"], section[dat
 .prog-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #14B8A6, #0F766E); }
 
 /* ---------- Calendário ---------- */
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin: 12px 0 22px 0; }
-.cal-head { text-align: center; font-weight: 700; font-size: .74rem; padding: 9px 4px; background: var(--navy); border-radius: 10px; color: #CBD5E1; letter-spacing: .08em; text-transform: uppercase; }
-.cal-cell { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; min-height: 92px; padding: 7px; display: flex; flex-direction: column; box-shadow: var(--sh-xs); }
-.cal-cell-empty { background: transparent; border: 1px dashed var(--line); min-height: 92px; border-radius: 12px; }
+/* minmax(0,1fr): impede que o texto das etiquetas alargue as colunas e distorça o calendário no celular */
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin: 12px 0 22px 0; width: 100%; max-width: 100%; }
+.cal-head { text-align: center; font-weight: 700; font-size: .74rem; padding: 9px 4px; background: var(--navy); border-radius: 10px; color: #CBD5E1; letter-spacing: .08em; text-transform: uppercase; min-width: 0; overflow: hidden; }
+.cal-cell { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; min-height: 92px; padding: 7px; display: flex; flex-direction: column; box-shadow: var(--sh-xs); min-width: 0; overflow: hidden; }
+.cal-cell-empty { background: transparent; border: 1px dashed var(--line); min-height: 92px; border-radius: 12px; min-width: 0; }
 .cal-day-num { font-size: .8rem; font-weight: 700; color: var(--ink-3); margin-bottom: 5px; }
 .cal-day-hoje { background: #F0FDFA !important; border: 2px solid var(--brand) !important; }
 .cal-day-hoje .cal-day-num { color: var(--brand); }
-.cal-tag { font-size: .66rem; padding: 3px 5px; border-radius: 5px; margin-bottom: 3px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 1.25; }
+.cal-tag { font-size: .66rem; padding: 3px 5px; border-radius: 5px; margin-bottom: 3px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 1.25; max-width: 100%; min-width: 0; box-sizing: border-box; }
 .tag-pago { background: #DCFCE7; color: #15803D; border-left: 3px solid #16A34A; }
 .tag-atraso { background: #FEE2E2; color: #B91C1C; border-left: 3px solid #DC2626; }
 .tag-hoje { background: #FEF3C7; color: #B45309; border-left: 3px solid #F59E0B; }
@@ -717,6 +718,42 @@ hr { border-color: var(--line) !important; }
 [data-testid="stStatusWidget"] { display: none !important; }
 .app-footer { text-align: center; color: var(--ink-4); font-size: .76rem; margin: 3rem 0 0; padding-top: 1.2rem; border-top: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* --- Correções para Celular / Responsividade (calendário e cards) --- */
+@media (max-width: 768px) {
+  .block-container { padding-left: .6rem !important; padding-right: .6rem !important; }
+  .cal-grid {
+    gap: 3px !important;
+    margin: 8px 0 16px 0 !important;
+  }
+  .cal-cell {
+    min-height: 55px !important;
+    padding: 3px !important;
+    border-radius: 8px !important;
+  }
+  .cal-cell-empty {
+    min-height: 55px !important;
+    border-radius: 8px !important;
+  }
+  .cal-day-num {
+    font-size: 0.7rem !important;
+    margin-bottom: 2px !important;
+  }
+  .cal-tag {
+    font-size: 0.5rem !important;
+    padding: 1px 3px !important;
+    margin-bottom: 1px !important;
+    border-left-width: 2px !important;
+  }
+  .cal-head {
+    font-size: 0.6rem !important;
+    padding: 6px 2px !important;
+    letter-spacing: 0 !important;
+    border-radius: 6px !important;
+  }
+  .stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important; gap: 10px !important; }
+  .stat-n { font-size: 1.25rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -759,6 +796,7 @@ def render_tela_login():
     .lg-fd { color:#64748B; font-size:.84rem; margin-top:3px; line-height:1.5; }
     .lg-logo { width:54px; height:54px; border-radius:16px; background:linear-gradient(135deg,#14B8A6,#0F766E); display:grid; place-items:center; font-size:1.15rem; font-weight:800; color:#FFFFFF; letter-spacing:.02em; margin:0 auto 12px; box-shadow:0 12px 26px -8px rgba(15,118,110,.5); }
     [data-testid="stImage"] img { border-radius: 20px; box-shadow: 0 24px 50px -20px rgba(11,18,32,.35); }
+    @media (max-width: 768px) { .lg-h { font-size: 1.8rem; } }
     </style>
     """, unsafe_allow_html=True)
 
