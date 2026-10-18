@@ -1149,6 +1149,10 @@ def calcular_atraso_real_divida(dev):
     val_esperado = parc_esperadas * v_parc
     val_atraso = max(0.0, min(falta_tot, val_esperado - tot_pago))
 
+    # Valor da parcela do mês (é isso que deve aparecer na etiqueta "Em atraso",
+    # e não o valor total acumulado). Nunca passa do que ainda falta pagar.
+    parcela_mes = min(v_parc, falta_tot)
+
     is_quitado = falta_tot <= 0.05 or dev.get("status") == "quitado"
 
     if is_quitado:
@@ -1157,7 +1161,7 @@ def calcular_atraso_real_divida(dev):
         msg_detalhe = "Dívida totalmente paga!"
     elif val_atraso > 0:
         status_d = "atrasado"
-        badge = f"<span class='badge-status status-atraso'>Em atraso: {fmt_moeda(val_atraso)}</span>"
+        badge = f"<span class='badge-status status-atraso'>Em atraso: {fmt_moeda(parcela_mes)}</span>"
         n_parc_atr = int(round(val_atraso / v_parc)) if v_parc > 0 else 1
         msg_detalhe = f"{n_parc_atr} parcela(s) vencida(s)"
     else:
@@ -1168,6 +1172,7 @@ def calcular_atraso_real_divida(dev):
     return {
         "falta_total": falta_tot,
         "valor_atraso": val_atraso,
+        "parcela_mes": parcela_mes,
         "v_parc": v_parc,
         "total_pago": tot_pago,
         "total_contratado": v_tot,
@@ -1733,7 +1738,12 @@ if menu == "Visão Geral":
     secao("Devedores", "Valores que terceiros ainda te devem.")
     devedores = db.get("devedores", [])
     total_geral_receber = sum(calcular_atraso_real_divida(d)["falta_total"] for d in devedores)
-    total_atraso_devedores = sum(calcular_atraso_real_divida(d)["valor_atraso"] for d in devedores)
+    # Em atraso = soma das parcelas do mês das dívidas que estão atrasadas (e não o total acumulado)
+    total_atraso_devedores = sum(
+        calcular_atraso_real_divida(d)["parcela_mes"]
+        for d in devedores
+        if calcular_atraso_real_divida(d)["status"] == "atrasado"
+    )
 
     md(f"""
     <div class="card-pro">
@@ -2915,8 +2925,8 @@ elif menu == "Devedores":
                             elif info["valor_atraso"] > 0:
                                 md(f"""
                                 <div>
-                                  <div style="font-size:1.05rem;font-weight:800;color:#B91C1C">Atraso: {fmt_moeda(info['valor_atraso'])}</div>
-                                  <div style="font-size:.78rem;color:#B91C1C;font-weight:600">Parcelas vencidas pendentes</div>
+                                  <div style="font-size:1.05rem;font-weight:800;color:#B91C1C">Atraso: {fmt_moeda(info['parcela_mes'])}</div>
+                                  <div style="font-size:.78rem;color:#B91C1C;font-weight:600">Parcela do mês em atraso</div>
                                 </div>
                                 """)
                             else:
