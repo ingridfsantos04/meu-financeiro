@@ -281,34 +281,55 @@ def _cached(chave, ttl, fn):
         return val
     return item[1] if item else None
 
+def _tentar_fontes(fontes):
+    """Tenta cada fonte em ordem; devolve a primeira que responder com preço válido."""
+    for fonte in fontes:
+        try:
+            r = fonte()
+            if r and r.get("preco") and float(r["preco"]) > 0:
+                return r
+        except Exception:
+            continue
+    return None
+
+def _yahoo_quote(simbolo):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(simbolo)}?interval=1m&range=1d"
+    meta = _get_json(url, timeout=5)["chart"]["result"][0]["meta"]
+    preco = float(meta["regularMarketPrice"])
+    prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+    pct = ((preco - float(prev)) / float(prev) * 100) if prev else None
+    return {"preco": preco, "pct": pct}
+
+def _awesome_quote(par):
+    chave = par.replace("-", "")
+    d = _get_json(f"https://economia.awesomeapi.com.br/last/{par}", timeout=5)[chave]
+    return {"preco": float(d["bid"]), "pct": float(d.get("pctChange", 0.0))}
+
+def _binance_quote(simbolo):
+    # data-api.binance.vision funciona também em servidores nos EUA (Streamlit Cloud)
+    d = _get_json(f"https://data-api.binance.vision/api/v3/ticker/24hr?symbol={simbolo}", timeout=5)
+    return {"preco": float(d["lastPrice"]), "pct": float(d["priceChangePercent"])}
+
 def cotacao_dolar():
     def f():
-        try:
-            d = _get_json("https://economia.awesomeapi.com.br/last/USD-BRL")["USDBRL"]
-            return {"preco": float(d["bid"]), "pct": float(d.get("pctChange", 0.0))}
-        except Exception:
-            pass
-        try:
-            d = _get_json("https://api.coinbase.com/v2/exchange-rates?currency=USD")
-            return {"preco": float(d["data"]["rates"]["BRL"]), "pct": None}
-        except Exception:
-            return None
-    return _cached("USD-BRL", 30, f)
+        return _tentar_fontes([
+            lambda: _awesome_quote("USD-BRL"),
+            lambda: _yahoo_quote("BRL=X"),
+            lambda: _binance_quote("USDTBRL"),
+            lambda: {"preco": float(_get_json("https://api.coinbase.com/v2/exchange-rates?currency=USD", timeout=5)["data"]["rates"]["BRL"]), "pct": None},
+        ])
+    return _cached("USD-BRL", 20, f)
 
 def cotacao_cripto(simbolo):
     s = simbolo.strip().upper()
     def f():
-        try:
-            d = _get_json(f"https://economia.awesomeapi.com.br/last/{s}-BRL")[f"{s}BRL"]
-            return {"preco": float(d["bid"]), "pct": float(d.get("pctChange", 0.0))}
-        except Exception:
-            pass
-        try:
-            d = _get_json(f"https://api.coinbase.com/v2/prices/{s}-BRL/spot")
-            return {"preco": float(d["data"]["amount"]), "pct": None}
-        except Exception:
-            return None
-    return _cached(f"CRIPTO-{s}", 30, f)
+        return _tentar_fontes([
+            lambda: _awesome_quote(f"{s}-BRL"),
+            lambda: _yahoo_quote(f"{s}-BRL"),
+            lambda: _binance_quote(f"{s}BRL"),
+            lambda: {"preco": float(_get_json(f"https://api.coinbase.com/v2/prices/{s}-BRL/spot", timeout=5)["data"]["amount"]), "pct": None},
+        ])
+    return _cached(f"CRIPTO-{s}", 20, f)
 
 def _url_brapi(caminho):
     url = f"https://brapi.dev/api/{caminho}"
@@ -1170,7 +1191,7 @@ with st.sidebar:
     )
 
     md("<div class='side-label'>Mercado</div>")
-    auto_tempo_real = st.toggle("Tempo real (atualiza a cada 60s)", value=True, help="Atualiza dólar, Bitcoin, ações e FIIs automaticamente.")
+    auto_tempo_real = st.toggle("Tempo real (atualiza a cada 30s)", value=True, help="Atualiza dólar, Bitcoin, ações e FIIs automaticamente.")
 
     if st.button("Atualizar cotações agora", type="primary", use_container_width=True):
         CACHE.clear()
@@ -1284,7 +1305,7 @@ def render_barra_cotacoes():
         usd, btc, ibov = f_usd.result(), f_btc.result(), f_ibov.result()
 
     hora = agora_br().strftime("%H:%M:%S")
-    status = "AO VIVO · 60s" if auto_tempo_real else "MANUAL"
+    status = "AO VIVO · 30s" if auto_tempo_real else "MANUAL"
 
     cards_html = _card_cotacao("Dólar", usd, tipo="dolar", casas=4) + _card_cotacao("Bitcoin", btc, casas=0)
     if ibov:
@@ -1304,7 +1325,7 @@ def _barra_ao_vivo():
             st.rerun()
 
 if auto_tempo_real and hasattr(st, "fragment"):
-    st.fragment(run_every=60)(_barra_ao_vivo)()
+    st.fragment(run_every=30)(_barra_ao_vivo)()
 else:
     _barra_ao_vivo()
 
