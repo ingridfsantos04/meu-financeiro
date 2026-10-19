@@ -14,6 +14,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import json
 import os
 import html
@@ -173,6 +174,7 @@ LISTA_CATEGORIAS_CONTAS = [
 
 # --- Visual dos gráficos (Plotly) ---
 LAYOUT_GRAFICO = {
+    "separators": ",.",
     "margin": dict(l=10, r=10, t=20, b=10),
     "paper_bgcolor": "rgba(0,0,0,0)",
     "plot_bgcolor": "rgba(0,0,0,0)",
@@ -879,6 +881,58 @@ section[data-testid="stSidebar"] div[role="radiogroup"] label { border-radius: v
   .hero-title { font-size: 1.2rem; }
   .hero-box { padding: 1rem 1.1rem; }
   .banner-v { font-size: 1.6rem; }
+}
+
+/* ============================================================================
+   v3 - GRÁFICOS, INDICADORES E ACABAMENTO
+   ============================================================================ */
+.chart-h { margin: .2rem 0 .5rem; }
+.chart-t { font-size: .92rem; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.chart-s { font-size: .78rem; color: var(--ink-3); margin-top: 2px; }
+[data-testid="stPlotlyChart"] { padding: .4rem .5rem; border-radius: var(--r-lg); box-shadow: var(--sh-sm); overflow: hidden; }
+.js-plotly-plot .plotly .modebar { display: none !important; }
+
+/* Legenda dos gráficos de rosca */
+.leg { display: flex; flex-direction: column; gap: 2px; padding: .4rem .2rem; }
+.leg-row { display: grid; grid-template-columns: 12px 1fr auto 52px; align-items: center; gap: 10px; padding: .5rem .6rem; border-radius: 8px; font-size: .84rem; }
+.leg-row:hover { background: #F4F6FA; }
+.leg-dot { width: 10px; height: 10px; border-radius: 3px; }
+.leg-n { color: var(--ink-2); font-weight: 600; }
+.leg-v { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.leg-p { color: var(--ink-3); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; font-size: .78rem; }
+
+/* Indicadores */
+.meter-box { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 1.1rem 1.3rem; box-shadow: var(--sh-sm); margin-bottom: 1rem; }
+.meter-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: .7rem; }
+.meter-l { font-size: .72rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; }
+.meter-v { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.meter-f { display: flex; justify-content: space-between; margin-top: .55rem; font-size: .78rem; color: var(--ink-3); gap: 8px; flex-wrap: wrap; }
+.prog-wrap { background: #E8EDF3; }
+.legend-cal { display: flex; gap: 14px; flex-wrap: wrap; font-size: .76rem; color: var(--ink-3); margin: -.4rem 0 .6rem; }
+.legend-cal span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+
+/* Painéis e cabeçalho */
+.insight { display: flex; gap: 12px; align-items: flex-start; background: #F0FDFA; border: 1px solid #CCEFEA; border-radius: var(--r-lg); padding: .8rem 1.1rem; font-size: .86rem; color: #115E59; line-height: 1.5; margin: .4rem 0 1rem; }
+.insight b { color: #0B4F4A; }
+.tip { border-radius: var(--r-md); }
+.hero-box { position: relative; }
+.hero-box .hero-title { text-wrap: balance; }
+
+/* Tabelas / listas */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] { gap: .8rem; }
+.stTabs [data-baseweb="tab-list"] { gap: 2px; }
+.stTabs [data-baseweb="tab"] { height: 42px; padding: 0 14px; font-weight: 600; font-size: .88rem; }
+
+/* Navegação lateral */
+section[data-testid="stSidebar"] .brand { padding-bottom: 1rem; }
+section[data-testid="stSidebar"] div[role="radiogroup"] label p { font-size: .9rem !important; }
+
+/* Scroll suave e seleção */
+html { scroll-behavior: smooth; }
+@media (max-width: 768px) {
+  .leg-row { grid-template-columns: 12px 1fr auto 44px; gap: 8px; padding: .45rem .4rem; font-size: .8rem; }
+  .meter-v { font-size: 1.25rem; }
+  [data-testid="stPlotlyChart"] { padding: .2rem; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1736,6 +1790,197 @@ def listar_ativos(df_view):
                             st.rerun()
 
 # ==============================================================================
+# VISUALIZAÇÕES (gráficos e componentes visuais reutilizáveis)
+# ==============================================================================
+COR_ENTRADA = "#059669"
+COR_SAIDA = "#E11D48"
+COR_BRAND = "#0F766E"
+COR_AZUL = "#2563EB"
+COR_NEUTRA = "#CBD5E1"
+CORES_ORIGEM = {"Cartão": "#2563EB", "Contas fixas": "#E11D48", "Débito / PIX": "#F59E0B"}
+SEQ_CORES = ["#0F766E", "#2563EB", "#7C3AED", "#D97706", "#E11D48", "#0891B2", "#059669", "#DB2777", "#64748B"]
+
+def estilizar(fig, altura=320, legenda=True, **extra):
+    """Aplica o visual padrão do sistema a qualquer gráfico Plotly."""
+    layout = dict(LAYOUT_GRAFICO)
+    layout.update(height=altura, showlegend=legenda)
+    if legenda:
+        layout["legend"] = dict(orientation="h", yanchor="top", y=-0.14, xanchor="center", x=0.5, font=dict(size=11), title=None)
+    layout.update(extra)
+    fig.update_layout(**layout)
+    fig.update_xaxes(showgrid=False, linecolor="#E5E9F0", tickfont=dict(size=11, color="#64748B"), title=None)
+    fig.update_yaxes(gridcolor=GRADE_GRAFICO, zeroline=False, tickfont=dict(size=11, color="#64748B"), title=None)
+    return fig
+
+def mostrar(fig):
+    st.plotly_chart(fig, use_container_width=True, config=CONFIG_PLOTLY)
+
+def titulo_grafico(titulo, sub=""):
+    s_ = f"<div class='chart-s'>{sub}</div>" if sub else ""
+    md(f"<div class='chart-h'><div class='chart-t'>{titulo}</div>{s_}</div>")
+
+def rotulo_mes(a, m):
+    return f"{MESES_PT[m - 1][:3]}/{str(a)[2:]}"
+
+def meses_ate(ano, mes, n):
+    """Lista de (ano, mês) dos n meses que terminam no mês informado."""
+    out = []
+    for i in range(n - 1, -1, -1):
+        m0 = (ano * 12 + mes - 1) - i
+        out.append((m0 // 12, m0 % 12 + 1))
+    return out
+
+def resumo_mes(chave):
+    """Totais do mês usados nos gráficos (mesmas regras da Visão Geral)."""
+    trans = db.get("transacoes_debito", [])
+    ent = sum(float(t["valor"]) for t in trans if t["tipo"] == "Entrada (+)" and t["data"].startswith(chave))
+    prov = sum(float(p["valor"]) for p in db.get("proventos", []) if p.get("status") == "recebido" and p["data"].startswith(chave))
+    deb = sum(float(t["valor"]) for t in trans if t["tipo"] == "Saída (-)" and t["data"].startswith(chave))
+    fat = calcular_fatura_cartao_mes(chave)
+    cfx = sum(float(c["valor"]) for c in db.get("contas_fixas", []) if c["mes_ano"] == chave)
+    return {"entradas": ent + prov, "fatura": fat, "contas": cfx, "debito": deb, "despesas": fat + cfx + deb}
+
+def despesas_por_categoria(chave):
+    """Despesas do mês por categoria e origem (cartão, contas fixas, débito/PIX)."""
+    linhas = []
+    for c in db.get("cartao_compras", []):
+        p_tot = max(int(c.get("parcelas_total", 1)), 1)
+        v_parc = float(c.get("valor_parcela", float(c.get("valor_total", 0.0)) / p_tot))
+        a_ini, m_ini = inicio_fatura_compra(c)
+        for p_idx in range(1, p_tot + 1):
+            m_calc = m_ini + (p_idx - 1)
+            a_calc = a_ini + (m_calc - 1) // 12
+            m_real = ((m_calc - 1) % 12) + 1
+            if f"{a_calc:04d}-{m_real:02d}" == chave:
+                linhas.append(("Cartão", c.get("categoria", "Outros"), v_parc))
+    for c in db.get("contas_fixas", []):
+        if c["mes_ano"] == chave:
+            linhas.append(("Contas fixas", c.get("categoria", "Outros"), float(c["valor"])))
+    for t in db.get("transacoes_debito", []):
+        if t["tipo"] == "Saída (-)" and t["data"].startswith(chave):
+            linhas.append(("Débito / PIX", t.get("categoria", "Outros"), float(t["valor"])))
+    return pd.DataFrame(linhas, columns=["origem", "categoria", "valor"])
+
+def fig_fluxo_mes(entradas, caixinha, fatura, contas, debito, nome_caixinha="Caixinha"):
+    """Cascata: de onde vem o dinheiro e para onde ele vai até chegar ao saldo livre."""
+    saldo = entradas + caixinha - fatura - contas - debito
+    rot = ["Entradas", nome_caixinha, "Fatura do cartão", "Contas fixas", "Débito / PIX", "Saldo livre"]
+    val = [entradas, caixinha, -fatura, -contas, -debito, 0]
+    txt = [fmt_moeda(entradas), fmt_moeda(caixinha), "-" + fmt_moeda(fatura), "-" + fmt_moeda(contas), "-" + fmt_moeda(debito), fmt_moeda(saldo)]
+    fig = go.Figure(go.Waterfall(
+        x=rot, y=val, measure=["relative"] * 5 + ["total"], text=txt, textposition="outside", cliponaxis=False,
+        connector=dict(line=dict(color="#CBD5E1", width=1, dash="dot")),
+        increasing=dict(marker=dict(color=COR_ENTRADA)), decreasing=dict(marker=dict(color=COR_SAIDA)),
+        totals=dict(marker=dict(color=COR_BRAND if saldo >= 0 else "#991B1B")),
+        hovertemplate="<b>%{x}</b><br>%{text}<extra></extra>"))
+    estilizar(fig, 340, legenda=False, margin=dict(l=10, r=10, t=30, b=10))
+    fig.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
+    return fig
+
+def fig_evolucao(lista_meses):
+    """Entradas x despesas dos últimos meses, com a linha do saldo."""
+    rot, ent, desp, saldo = [], [], [], []
+    for a, m in lista_meses:
+        r = resumo_mes(f"{a:04d}-{m:02d}")
+        rot.append(rotulo_mes(a, m)); ent.append(r["entradas"]); desp.append(r["despesas"]); saldo.append(r["entradas"] - r["despesas"])
+    fig = go.Figure()
+    fig.add_bar(x=rot, y=ent, name="Entradas", marker=dict(color=COR_ENTRADA, cornerradius=5),
+                hovertemplate="<b>%{x}</b><br>Entradas: R$ %{y:,.2f}<extra></extra>")
+    fig.add_bar(x=rot, y=desp, name="Despesas", marker=dict(color=COR_SAIDA, cornerradius=5),
+                hovertemplate="<b>%{x}</b><br>Despesas: R$ %{y:,.2f}<extra></extra>")
+    fig.add_scatter(x=rot, y=saldo, name="Saldo do mês", mode="lines+markers",
+                    line=dict(color="#0B1220", width=2.5), marker=dict(size=8, color="#FFFFFF", line=dict(color="#0B1220", width=2)),
+                    hovertemplate="<b>%{x}</b><br>Saldo: R$ %{y:,.2f}<extra></extra>")
+    estilizar(fig, 340, barmode="group", bargap=0.35, bargroupgap=0.08)
+    fig.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
+    return fig
+
+def fig_categorias(df):
+    """Barras empilhadas por categoria, coloridas pela origem do gasto."""
+    if df.empty:
+        return None
+    ordem = df.groupby("categoria")["valor"].sum().sort_values().index.tolist()
+    fig = px.bar(df.groupby(["categoria", "origem"], as_index=False)["valor"].sum(), x="valor", y="categoria", color="origem",
+                 orientation="h", color_discrete_map=CORES_ORIGEM, category_orders={"categoria": ordem})
+    fig.update_traces(marker=dict(cornerradius=4), hovertemplate="<b>%{y}</b><br>%{fullData.name}: R$ %{x:,.2f}<extra></extra>")
+    estilizar(fig, max(280, 38 * len(ordem) + 100), bargap=0.3)
+    fig.update_xaxes(tickprefix="R$ ", tickformat=",.0f", showgrid=True, gridcolor=GRADE_GRAFICO)
+    fig.update_yaxes(showgrid=False)
+    return fig
+
+def fig_donut(rotulos, valores, cores, centro, altura=300):
+    fig = go.Figure(go.Pie(
+        labels=rotulos, values=valores, hole=0.7, sort=False, direction="clockwise", textinfo="none",
+        marker=dict(colors=cores, line=dict(color="#FFFFFF", width=3)),
+        hovertemplate="<b>%{label}</b><br>R$ %{value:,.2f} (%{percent})<extra></extra>"))
+    fig.add_annotation(text=centro, showarrow=False, align="center", font=dict(size=15, color="#0B1220"))
+    estilizar(fig, altura, legenda=False)
+    return fig
+
+def legenda_html(rotulos, valores, cores):
+    total = sum(valores) or 1.0
+    linhas = "".join(
+        f"<div class='leg-row'><span class='leg-dot' style='background:{c}'></span><span class='leg-n'>{html.escape(str(r))}</span>"
+        f"<span class='leg-v'>{fmt_moeda(v)}</span><span class='leg-p'>{v / total * 100:.1f}%</span></div>"
+        for r, v, c in zip(rotulos, valores, cores))
+    return f"<div class='leg'>{linhas}</div>"
+
+def fig_resultado_ativos(df):
+    d = df.sort_values("lucro_reais")
+    cores = [COR_ENTRADA if v >= 0 else COR_SAIDA for v in d["lucro_reais"]]
+    textos = [f"{fmt_moeda(v)}  ·  {fmt_pct(p)}" for v, p in zip(d["lucro_reais"], d["rentabilidade_pct"])]
+    fig = go.Figure(go.Bar(x=d["lucro_reais"], y=d["ticker"], orientation="h", marker=dict(color=cores, cornerradius=5),
+                           text=textos, textposition="outside", cliponaxis=False,
+                           hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>"))
+    estilizar(fig, max(280, 44 * len(d) + 90), legenda=False, margin=dict(l=10, r=130, t=10, b=10), bargap=0.35)
+    fig.update_xaxes(tickprefix="R$ ", tickformat=",.0f", showgrid=True, gridcolor=GRADE_GRAFICO, zeroline=True, zerolinecolor="#94A3B8")
+    fig.update_yaxes(showgrid=False)
+    return fig
+
+def fig_projecao_faturas(chaves, projecao, chave_sel):
+    rot = [rotulo_mes(int(k[:4]), int(k[5:7])) for k in chaves]
+    val = [projecao[k] for k in chaves]
+    cores = [COR_BRAND if k == chave_sel else "#99D5CE" for k in chaves]
+    fig = go.Figure(go.Bar(x=rot, y=val, marker=dict(color=cores, cornerradius=7), text=[fmt_moeda(v, 0) for v in val],
+                           textposition="outside", cliponaxis=False,
+                           hovertemplate="<b>%{x}</b><br>Fatura: R$ %{y:,.2f}<extra></extra>"))
+    if val:
+        media = sum(val) / len(val)
+        fig.add_hline(y=media, line=dict(color="#94A3B8", width=1.5, dash="dash"),
+                      annotation_text=f"média {fmt_moeda(media, 0)}", annotation_position="top left",
+                      annotation_font=dict(size=11, color="#64748B"))
+    estilizar(fig, 330, legenda=False, margin=dict(l=10, r=10, t=30, b=10), bargap=0.3)
+    fig.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
+    return fig
+
+def fig_divida_restante(chaves, projecao):
+    """Quanto ainda falta pagar de parcelas, mês a mês."""
+    rot = [rotulo_mes(int(k[:4]), int(k[5:7])) for k in chaves]
+    rest = [sum(projecao[k] for k in chaves[i:]) for i in range(len(chaves))]
+    fig = go.Figure(go.Scatter(x=rot, y=rest, mode="lines+markers", fill="tozeroy",
+                               line=dict(color=COR_BRAND, width=3, shape="spline"), fillcolor="rgba(15,118,110,.12)",
+                               marker=dict(size=7, color="#FFFFFF", line=dict(color=COR_BRAND, width=2)),
+                               hovertemplate="<b>%{x}</b><br>Ainda a pagar: R$ %{y:,.2f}<extra></extra>"))
+    estilizar(fig, 300, legenda=False)
+    fig.update_yaxes(tickprefix="R$ ", tickformat=",.0f", rangemode="tozero")
+    return fig
+
+def fig_barras_simples(rotulos, valores, cor=COR_AZUL, altura=280):
+    fig = go.Figure(go.Bar(x=valores, y=rotulos, orientation="h", marker=dict(color=cor, cornerradius=5),
+                           text=[fmt_moeda(v) for v in valores], textposition="outside", cliponaxis=False,
+                           hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>"))
+    estilizar(fig, altura, legenda=False, margin=dict(l=10, r=90, t=10, b=10), bargap=0.4)
+    fig.update_xaxes(showgrid=False, showticklabels=False)
+    fig.update_yaxes(showgrid=False, autorange="reversed")
+    return fig
+
+def barra_progresso(pct, cor=None, altura=10):
+    """Barra de progresso em HTML (pct de 0 a 100)."""
+    pct = max(0.0, min(100.0, float(pct)))
+    fundo = cor or "linear-gradient(90deg,#14B8A6,#0F766E)"
+    return f"<div class='prog-wrap' style='height:{altura}px'><div class='prog-bar' style='width:{pct:.1f}%;background:{fundo}'></div></div>"
+
+# ==============================================================================
 # TELA: VISÃO GERAL
 # ==============================================================================
 def pagina_visao_geral() -> None:
@@ -1872,6 +2117,31 @@ def pagina_visao_geral() -> None:
                     for ts in trans_saidas_mes:
                         st.write(f"• {ts['data'][8:10]}/{ts['data'][5:7]}: **{ts['descricao']}** (-{fmt_moeda(ts['valor'])})")
 
+    # ---------------- Fluxo do mês ----------------
+    secao(f"Fluxo de {nome_mes_vg}", "De onde veio o dinheiro, para onde foi e quanto sobrou.")
+    col_f1, col_f2 = st.columns([1.15, 1], gap="large")
+    with col_f1:
+        titulo_grafico("Do dinheiro disponível ao saldo livre", "Entradas + caixinha de fluxo, menos fatura, contas fixas e débito/PIX")
+        mostrar(fig_fluxo_mes(total_entradas_mes, saldo_fluxo, fatura_cartao_mes, total_contas_fixas_mes, saidas_debito_mes, "Caixinha"))
+    with col_f2:
+        titulo_grafico("Despesas por categoria", "Cartão, contas fixas e débito/PIX no mês")
+        _fig_cat = fig_categorias(despesas_por_categoria(chave_mes_vg))
+        if _fig_cat is not None:
+            mostrar(_fig_cat)
+        else:
+            vazio("Nenhuma despesa registrada neste mês.")
+
+    # ---------------- Evolução ----------------
+    secao("Evolução dos últimos 6 meses", "Entradas, despesas e o saldo de cada mês. A linha mostra se sobrou ou faltou dinheiro.")
+    _meses_hist = meses_ate(ano_vg, mes_vg_idx, 6)
+    _hist = [resumo_mes(f"{a:04d}-{m:02d}") for a, m in _meses_hist]
+    mostrar(fig_evolucao(_meses_hist))
+    if any(h["entradas"] > 0 or h["despesas"] > 0 for h in _hist):
+        _me = sum(h["entradas"] for h in _hist) / len(_hist)
+        _md = sum(h["despesas"] for h in _hist) / len(_hist)
+        _tom = "sobrando" if _me >= _md else "faltando"
+        md(f"<div class='insight'><div>Média dos últimos 6 meses: <b>{fmt_moeda(_me)}</b> de entradas e <b>{fmt_moeda(_md)}</b> de despesas, ou seja, em média está {_tom} <b>{fmt_moeda(abs(_me - _md))}</b> por mês.</div></div>")
+
     secao("Meu patrimônio", "Tudo o que você tem hoje: investimentos, moedas e caixinhas.")
 
     def _pat(cl):
@@ -1906,69 +2176,35 @@ def pagina_visao_geral() -> None:
     </div>
     """)
 
-    secao("Desempenho dos investimentos", "Onde você está ganhando ou perdendo.")
+    secao("Desempenho dos investimentos", "Como o patrimônio está distribuído e onde você está ganhando ou perdendo.")
 
     if not df_ativos.empty:
-        df_lucro = df_ativos.copy()
-        df_lucro["cor"] = df_lucro["lucro_reais"].apply(lambda x: "#059669" if x >= 0 else "#DC2626")
-        df_lucro["rotulo"] = df_lucro.apply(lambda r: fmt_pct(r["rentabilidade_pct"]), axis=1)
-
-        col_gf1, col_gf2 = st.columns([1.6, 1], gap="large")
-        with col_gf1:
-            fig_lucro = px.bar(
-                df_lucro, x="ticker", y="lucro_reais", color="cor", color_discrete_map="identity", text="rotulo"
-            )
-            fig_lucro.update_layout(
-                **LAYOUT_GRAFICO, height=320,
-                xaxis=dict(gridcolor=GRADE_GRAFICO, title="", showline=False),
-                yaxis=dict(gridcolor=GRADE_GRAFICO, title="Lucro / Prejuízo (R$)", zeroline=True, zerolinecolor="#CBD5E1"),
-                showlegend=False
-            )
-            fig_lucro.update_traces(textposition="outside", marker=dict(cornerradius=6),
-                                    hovertemplate="<b>%{x}</b><br>Resultado: R$ %{y:,.2f}<extra></extra>")
-            st.plotly_chart(fig_lucro, use_container_width=True, config=CONFIG_PLOTLY)
-
-        with col_gf2:
-            itens_grafico = []
+        col_a, col_b = st.columns([1, 1.3], gap="large")
+        with col_a:
+            titulo_grafico("Composição do patrimônio", "Distribuição por classe de ativo")
+            _itens = []
             if total_em_caixinhas > 0:
-                itens_grafico.append({"classe": "Caixinhas", "valor": total_em_caixinhas})
+                _itens.append(("Caixinhas", total_em_caixinhas))
             for cl in CLASSES_INVEST:
                 v_cl = _pat(cl)
                 if v_cl > 0:
-                    itens_grafico.append({"classe": cl, "valor": v_cl})
+                    _itens.append((cl, v_cl))
+            if _itens:
+                _rot = [i[0] for i in _itens]
+                _val = [i[1] for i in _itens]
+                _cor = [CORES_CLASSE.get(r, "#64748B") for r in _rot]
+                mostrar(fig_donut(_rot, _val, _cor, f"<b>{fmt_moeda(patrimonio_total, 0)}</b><br><span style='font-size:11px;color:#64748B'>patrimônio</span>", 270))
+                md(legenda_html(_rot, _val, _cor))
+        with col_b:
+            titulo_grafico("Resultado por ativo", "Lucro ou prejuízo em R$ e rentabilidade sobre o valor investido")
+            mostrar(fig_resultado_ativos(df_ativos))
 
-            if itens_grafico:
-                df_pie_pat = pd.DataFrame(itens_grafico)
-                fig_donut = px.pie(df_pie_pat, names="classe", values="valor", hole=0.64, color="classe", color_discrete_map=CORES_CLASSE)
-                fig_donut.update_layout(**LAYOUT_GRAFICO, height=320, legend=dict(orientation="h", y=-0.08, x=0.5, xanchor="center"))
-                fig_donut.update_traces(textinfo="percent", marker=dict(line=dict(color="#FFFFFF", width=3)),
-                                        hovertemplate="<b>%{label}</b><br>R$ %{value:,.2f} (%{percent})<extra></extra>")
-                fig_donut.add_annotation(text=f"<b>{fmt_moeda(patrimonio_total, 0)}</b><br><span style='font-size:11px;color:#64748B'>patrimônio</span>",
-                                         showarrow=False, font=dict(size=16, color="#0B1220"))
-                st.plotly_chart(fig_donut, use_container_width=True, config=CONFIG_PLOTLY)
-
-        if resultado_ativos >= 0:
-            md(f"""
-            <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;padding:14px 20px;margin:1rem 0 1.5rem">
-              <span style="font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#15803D">Ganhos positivos</span>
-              <div style="font-size:.92rem;color:#166534;margin-top:4px;line-height:1.55">
-                Você investiu um total de <b>{fmt_moeda(total_investido_ativos)}</b> e hoje possui <b>{fmt_moeda(patrimonio_investido_bolsa)}</b> na carteira.
-                Lucro consolidado: <b>+{fmt_moeda(resultado_ativos)} ({fmt_pct(pct_geral_invest)})</b>.
-              </div>
-            </div>
-            """)
-        else:
-            md(f"""
-            <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:14px;padding:14px 20px;margin:1rem 0 1.5rem">
-              <span style="font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#B91C1C">Ganhos negativos</span>
-              <div style="font-size:.92rem;color:#991B1B;margin-top:4px;line-height:1.55">
-                Você investiu um total de <b>{fmt_moeda(total_investido_ativos)}</b> e o valor atual de mercado é <b>{fmt_moeda(patrimonio_investido_bolsa)}</b>.
-                Oscilação consolidada: <b>{fmt_moeda(resultado_ativos)} ({fmt_pct(pct_geral_invest)})</b>.
-              </div>
-            </div>
-            """)
+        _cls = "" if resultado_ativos >= 0 else "style='background:#FEF2F2;border-color:#FECACA;color:#991B1B'"
+        _txt = (f"Você investiu <b>{fmt_moeda(total_investido_ativos)}</b> e hoje a carteira vale <b>{fmt_moeda(patrimonio_investido_bolsa)}</b>. "
+                f"Resultado consolidado: <b>{'+' if resultado_ativos >= 0 else ''}{fmt_moeda(resultado_ativos)} ({fmt_pct(pct_geral_invest)})</b>.")
+        md(f"<div class='insight' {_cls}><div>{_txt}</div></div>")
     else:
-        vazio("Cadastre ativos na aba “Minha Carteira” para ver o desempenho dos seus investimentos.", "📈")
+        vazio("Cadastre ativos em “Minha Carteira” para ver o desempenho dos seus investimentos.")
 
     secao("Devedores", "Informativo: os recebimentos de devedores não entram na soma do mês, pois já são lançados como entrada (PIX).")
     devedores = db.get("devedores", [])
@@ -2032,6 +2268,39 @@ def pagina_resumo_diagnostico() -> None:
       <div class="stat"><div class="stat-n" style="color:#15803D">{fmt_moeda(pode_gastar_seguro)}</div><div class="stat-l">3. O que POSSO gastar com segurança</div></div>
     </div>
     """)
+
+    secao("Como o dinheiro do mês está distribuído", "Quanto da sua renda já está comprometido e quanto ainda está livre.")
+    _comprometido = fat_card + tot_cfix + sai_deb
+    _pct_comp = (_comprometido / ent_m * 100) if ent_m > 0 else (100.0 if _comprometido > 0 else 0.0)
+    _cor_m = "linear-gradient(90deg,#34D399,#059669)" if _pct_comp < 60 else ("linear-gradient(90deg,#FBBF24,#D97706)" if _pct_comp < 85 else "linear-gradient(90deg,#F87171,#DC2626)")
+    _txt_m = "Saudável" if _pct_comp < 60 else ("Atenção" if _pct_comp < 85 else "Crítico")
+    col_r1, col_r2 = st.columns([1, 1], gap="large")
+    with col_r1:
+        titulo_grafico("Distribuição da renda do mês", "Cartão, contas fixas, débito/PIX e o que sobra")
+        if ent_m > 0 or _comprometido > 0:
+            _rot = ["Fatura do cartão", "Contas fixas", "Débito / PIX", "Livre"]
+            _val = [fat_card, tot_cfix, sai_deb, max(0.0, ent_m - _comprometido)]
+            _cor = ["#2563EB", "#E11D48", "#F59E0B", "#059669"]
+            mostrar(fig_donut(_rot, _val, _cor, f"<b>{fmt_moeda(ent_m, 0)}</b><br><span style='font-size:11px;color:#64748B'>entradas</span>", 260))
+            md(legenda_html(_rot, _val, _cor))
+        else:
+            vazio("Sem entradas nem despesas neste mês.")
+    with col_r2:
+        titulo_grafico("Comprometimento da renda", "Quanto das entradas já está destinado a despesas")
+        md(f"""
+        <div class="meter-box">
+          <div class="meter-top">
+            <div><div class="meter-l">Comprometido</div><div class="meter-v">{_pct_comp:.1f}%</div></div>
+            <div style="text-align:right"><div class="meter-l">Situação</div><div class="meter-v" style="font-size:1.1rem">{_txt_m}</div></div>
+          </div>
+          {barra_progresso(_pct_comp, _cor_m, 12)}
+          <div class="meter-f"><span>Despesas: <b>{fmt_moeda(_comprometido)}</b></span><span>Entradas: <b>{fmt_moeda(ent_m)}</b></span></div>
+        </div>
+        """)
+        titulo_grafico("Despesas por categoria")
+        _fc = fig_categorias(despesas_por_categoria(ch_diag))
+        if _fc is not None:
+            mostrar(_fc)
 
     secao("Onde posso melhorar financeiramente?")
     for d in dicas:
@@ -2113,8 +2382,20 @@ def pagina_contas_fixas() -> None:
     </div>
     """)
 
+    _pct_pago = (pago_contas / total_mes_contas * 100) if total_mes_contas > 0 else 0.0
+    md(f"""
+    <div class="meter-box">
+      <div class="meter-top">
+        <div><div class="meter-l">Contas pagas em {nome_mes_contas}</div><div class="meter-v">{_pct_pago:.0f}%</div></div>
+        <div style="text-align:right"><div class="meter-l">Falta pagar</div><div class="meter-v" style="color:#B91C1C;font-size:1.2rem">{fmt_moeda(pendente_contas)}</div></div>
+      </div>
+      {barra_progresso(_pct_pago, None, 10)}
+    </div>
+    """)
+
     # CALENDÁRIO VISUAL
     secao(f"Vencimentos de {nome_mes_contas}/{ano_contas}")
+    md("<div class='legend-cal'><span style='--c:#16A34A'>Pago</span><span style='--c:#DC2626'>Em atraso</span><span style='--c:#F59E0B'>Vence hoje</span><span style='--c:#0284C7'>A vencer</span></div>")
 
     cal_obj = calendar.Calendar(firstweekday=0)
     semanas = cal_obj.monthdayscalendar(ano_contas, mes_contas_idx)
@@ -2327,6 +2608,26 @@ def pagina_carteira() -> None:
         if df_t1.empty:
             vazio("Nenhum ativo cadastrado nesta classe. Use o botão acima para cadastrar.", "📈")
         else:
+            _inv1 = float(df_t1["valor_investido"].sum())
+            _atu1 = float(df_t1["valor_atual"].sum())
+            _res1 = _atu1 - _inv1
+            _pct1 = (_res1 / _inv1 * 100) if _inv1 > 0 else 0.0
+            _cor1 = "#15803D" if _res1 >= 0 else "#B91C1C"
+            col_s1, col_s2 = st.columns([1.1, 1], gap="large")
+            with col_s1:
+                md(f"""
+                <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)) !important">
+                  <div class="stat"><div class="stat-n">{fmt_moeda(_inv1)}</div><div class="stat-l">Total investido</div></div>
+                  <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(_atu1)}</div><div class="stat-l">Valor atual</div></div>
+                  <div class="stat"><div class="stat-n" style="color:{_cor1}">{fmt_moeda(_res1)}</div><div class="stat-l">Resultado ({fmt_pct(_pct1)})</div></div>
+                </div>
+                """)
+            with col_s2:
+                _g = df_t1.groupby("classe")["valor_atual"].sum()
+                _g = _g[_g > 0].sort_values(ascending=False)
+                _rotg, _valg = list(_g.index), [float(v) for v in _g.values]
+                _corg = [CORES_CLASSE.get(r, "#64748B") for r in _rotg]
+                mostrar(fig_donut(_rotg, _valg, _corg, f"<b>{fmt_moeda(_atu1, 0)}</b>", 210))
             listar_ativos(df_t1)
 
     with aba_radar:
@@ -2755,6 +3056,24 @@ def pagina_dividendos() -> None:
     </div>
     """)
 
+    secao(f"Proventos em {a_p}", "Recebidos e previstos mês a mês. O mês selecionado fica destacado.")
+    _rec_m, _prev_m = [], []
+    for _m in range(1, 13):
+        _ch = f"{a_p:04d}-{_m:02d}"
+        _rec_m.append(sum(float(p["valor"]) for p in db.get("proventos", []) if p["data"].startswith(_ch) and p.get("status") == "recebido"))
+        _prev_m.append(sum(float(p["valor"]) for p in db.get("proventos", []) if p["data"].startswith(_ch) and p.get("status") == "previsto"))
+    _rot_m = [MESES_PT[i][:3] for i in range(12)]
+    fig_prov = go.Figure()
+    fig_prov.add_bar(x=_rot_m, y=_rec_m, name="Recebido", marker=dict(color=[COR_ENTRADA if i == m_p - 1 else "#6EE7B7" for i in range(12)], cornerradius=5),
+                     hovertemplate="<b>%{x}</b><br>Recebido: R$ %{y:,.2f}<extra></extra>")
+    fig_prov.add_bar(x=_rot_m, y=_prev_m, name="Previsto", marker=dict(color=[COR_AZUL if i == m_p - 1 else "#93C5FD" for i in range(12)], cornerradius=5),
+                     hovertemplate="<b>%{x}</b><br>Previsto: R$ %{y:,.2f}<extra></extra>")
+    estilizar(fig_prov, 300, barmode="stack", bargap=0.3)
+    fig_prov.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
+    mostrar(fig_prov)
+    md(f"<div class='insight'><div>Total de proventos em {a_p}: <b>{fmt_moeda(sum(_rec_m))}</b> recebidos e <b>{fmt_moeda(sum(_prev_m))}</b> previstos.</div></div>")
+
+    secao(f"Proventos de {MESES_PT[m_p-1]}/{a_p}")
     if not prov_mes:
         vazio(f"Nenhum dividendo agendado para {MESES_PT[m_p-1]}/{a_p}. Clique no botão acima para sincronizar!", "💰")
     else:
@@ -2911,29 +3230,47 @@ def pagina_cartao() -> None:
     """)
 
     if projecao_meses:
-        secao("Projeção das próximas faturas")
-        chaves_ordenadas = sorted([k for k in projecao_meses.keys() if k >= fatura_atual_real_chave])[:8]
+        chaves_futuras = sorted(k for k in projecao_meses.keys() if k >= fatura_atual_real_chave)
+        chaves_proj = chaves_futuras[:12]
 
-        df_proj = pd.DataFrame({
-            "Fatura": [f"{MESES_PT[int(k.split('-')[1])-1][:3]}/{k.split('-')[0][2:]}" for k in chaves_ordenadas],
-            "Valor": [projecao_meses[k] for k in chaves_ordenadas]
-        })
+        secao("Visão das faturas", "Quanto você paga em cada fatura e como a dívida parcelada vai diminuindo.")
+        col_p1, col_p2 = st.columns([1.5, 1], gap="large")
+        with col_p1:
+            titulo_grafico("Projeção das próximas faturas", f"Mês selecionado em destaque: {mes_fat_nome}/{ano_sel}")
+            mostrar(fig_projecao_faturas(chaves_proj, projecao_meses, fatura_chave_sel))
+        with col_p2:
+            titulo_grafico(f"Fatura de {mes_fat_nome} por categoria", "Para onde foi o dinheiro do cartão")
+            if compras_do_mes:
+                _cat = {}
+                for it in compras_do_mes:
+                    _cat[it["categoria"]] = _cat.get(it["categoria"], 0.0) + it["valor_parcela"]
+                _cat_ord = sorted(_cat.items(), key=lambda kv: kv[1], reverse=True)
+                _rot = [k for k, _ in _cat_ord]
+                _val = [v for _, v in _cat_ord]
+                _cor = [SEQ_CORES[i % len(SEQ_CORES)] for i in range(len(_rot))]
+                mostrar(fig_donut(_rot, _val, _cor, f"<b>{fmt_moeda(total_fatura_mes_sel, 0)}</b><br><span style='font-size:11px;color:#64748B'>fatura</span>", 250))
+                md(legenda_html(_rot, _val, _cor))
+            else:
+                vazio("Nenhuma compra nesta fatura.")
 
-        fig_faturas = px.bar(
-            df_proj, x="Fatura", y="Valor", color_discrete_sequence=["#0F766E"], text="Valor"
-        )
-        fig_faturas.update_layout(
-            **LAYOUT_GRAFICO, height=270,
-            xaxis=dict(gridcolor=GRADE_GRAFICO, title=""),
-            yaxis=dict(gridcolor=GRADE_GRAFICO, title="Valor da fatura (R$)")
-        )
-        fig_faturas.update_traces(texttemplate="R$ %{y:,.0f}", textposition="outside", marker=dict(cornerradius=8),
-                                  hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>")
-        st.plotly_chart(fig_faturas, use_container_width=True, config=CONFIG_PLOTLY)
+        col_p3, col_p4 = st.columns([1.5, 1], gap="large")
+        with col_p3:
+            titulo_grafico("Dívida parcelada a pagar", "Quanto ainda falta pagar, a partir de cada mês")
+            if len(chaves_futuras) >= 1:
+                mostrar(fig_divida_restante(chaves_futuras[:18], projecao_meses))
+        with col_p4:
+            titulo_grafico(f"Por cartão em {mes_fat_nome}", "Quanto cada cartão pesa nesta fatura")
+            if compras_do_mes:
+                _cartao = {}
+                for it in compras_do_mes:
+                    _cartao[it["cartao"]] = _cartao.get(it["cartao"], 0.0) + it["valor_parcela"]
+                _cs = sorted(_cartao.items(), key=lambda kv: kv[1], reverse=True)
+                mostrar(fig_barras_simples([k for k, _ in _cs], [v for _, v in _cs], COR_AZUL, max(200, 56 * len(_cs) + 60)))
+            else:
+                vazio("Nenhuma compra nesta fatura.")
 
-        md("<div style='font-weight:700;color:#334155;margin:10px 0 6px;font-size:.88rem'>Selecione o mês para abrir a fatura:</div>")
-        chaves_botoes = [k for k in sorted(projecao_meses.keys())
-                         if k >= fatura_atual_real_chave and int(k.split("-")[0]) in anos_opcoes][:12]
+        secao("Abrir outra fatura", "Selecione o mês para ver todas as compras e parcelas dele.")
+        chaves_botoes = [k for k in chaves_futuras if int(k.split("-")[0]) in anos_opcoes][:12]
         for i in range(0, len(chaves_botoes), 6):
             linha = chaves_botoes[i:i + 6]
             cols_botoes = st.columns(6)
@@ -3038,6 +3375,34 @@ def pagina_conta_debito() -> None:
       <div class="stat"><div class="stat-n" style="color:{'#15803D' if saldo_conta_mes >= 0 else '#B91C1C'}">{fmt_moeda(saldo_conta_mes)}</div><div class="stat-l">Saldo da conta em {nome_mes_deb}</div></div>
     </div>
     """)
+
+    if transacoes_mes:
+        col_m1, col_m2 = st.columns([1.2, 1], gap="large")
+        with col_m1:
+            titulo_grafico("Saldo acumulado no mês", "Como o saldo da conta evoluiu a cada movimentação")
+            _acum, _xs, _ys = 0.0, [], []
+            for _t in sorted(transacoes_mes, key=lambda t: (t["data"], t["id"])):
+                _acum += float(_t["valor"]) if _t["tipo"] == "Entrada (+)" else -float(_t["valor"])
+                _xs.append(datetime.strptime(_t["data"], "%Y-%m-%d")); _ys.append(_acum)
+            fig_acum = go.Figure(go.Scatter(x=_xs, y=_ys, mode="lines+markers", line=dict(color=COR_BRAND, width=3, shape="hv"),
+                                            fill="tozeroy", fillcolor="rgba(15,118,110,.10)",
+                                            marker=dict(size=7, color="#FFFFFF", line=dict(color=COR_BRAND, width=2)),
+                                            hovertemplate="<b>%{x|%d/%m}</b><br>Saldo: R$ %{y:,.2f}<extra></extra>"))
+            estilizar(fig_acum, 290, legenda=False)
+            fig_acum.update_xaxes(tickformat="%d/%m")
+            fig_acum.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
+            mostrar(fig_acum)
+        with col_m2:
+            titulo_grafico("Saídas por categoria", "Onde o dinheiro da conta foi parar")
+            _sc = {}
+            for _t in transacoes_mes:
+                if _t["tipo"] == "Saída (-)":
+                    _sc[_t["categoria"]] = _sc.get(_t["categoria"], 0.0) + float(_t["valor"])
+            if _sc:
+                _so = sorted(_sc.items(), key=lambda kv: kv[1], reverse=True)
+                mostrar(fig_barras_simples([k for k, _ in _so], [v for _, v in _so], COR_SAIDA, max(200, 46 * len(_so) + 60)))
+            else:
+                vazio("Nenhuma saída neste mês.")
 
     secao(f"Extrato de movimentações — {nome_mes_deb}/{ano_deb}")
     if not transacoes_mes:
@@ -3184,6 +3549,7 @@ def pagina_devedores() -> None:
                           <div class="asset-tk">{html.escape(dev['descricao'])} <span class="chip {forma_class}">{forma_txt}</span></div>
                           <div style="margin-top:5px">{info['badge']}</div>
                           <div class="asset-sub" style="margin-top:4px">Início {datetime.strptime(dt_emp_str, '%Y-%m-%d').strftime('%d/%m/%Y')} · {info['msg_detalhe']}</div>
+                          <div style="margin-top:8px;max-width:340px">{barra_progresso((info['total_pago'] / info['total_contratado'] * 100) if info['total_contratado'] > 0 else 0, None, 6)}</div>
                         </div>
                         """)
 
@@ -3368,6 +3734,35 @@ def pagina_metas() -> None:
       </div>
     </div>
     """)
+
+    secao("Visão das metas", "Onde você está em relação ao que definiu.")
+    col_g1, col_g2 = st.columns([1, 1], gap="large")
+    with col_g1:
+        titulo_grafico("Meta de patrimônio", "Patrimônio atual em relação à meta")
+        fig_g = go.Figure(go.Indicator(
+            mode="gauge+number", value=patrimonio_total, number=dict(prefix="R$ ", valueformat=",.0f", font=dict(size=30, color="#0B1220")),
+            gauge=dict(axis=dict(range=[0, max(meta_p, patrimonio_total)], tickformat=",.0f", tickfont=dict(size=10, color="#64748B")),
+                       bar=dict(color=COR_BRAND, thickness=0.28), bgcolor="#EEF1F6", borderwidth=0,
+                       threshold=dict(line=dict(color="#0B1220", width=3), thickness=0.8, value=meta_p))))
+        estilizar(fig_g, 280, legenda=False, margin=dict(l=30, r=30, t=30, b=10))
+        mostrar(fig_g)
+    with col_g2:
+        titulo_grafico("Meta de renda mensal", "Média mensal de proventos recebidos nos últimos 12 meses")
+        _meses12 = meses_ate(hoje_br().year, hoje_br().month, 12)
+        _rec12 = sum(float(p["valor"]) for p in db.get("proventos", []) if p.get("status") == "recebido" and p["data"][:7] in {f"{a:04d}-{m:02d}" for a, m in _meses12})
+        _media12 = _rec12 / 12
+        _pct_renda = (_media12 / meta_r * 100) if meta_r > 0 else 0.0
+        md(f"""
+        <div class="meter-box">
+          <div class="meter-top">
+            <div><div class="meter-l">Renda passiva média</div><div class="meter-v">{fmt_moeda(_media12)}</div></div>
+            <div style="text-align:right"><div class="meter-l">Meta mensal</div><div class="meter-v" style="color:#0F766E;font-size:1.2rem">{fmt_moeda(meta_r)}</div></div>
+          </div>
+          {barra_progresso(_pct_renda, None, 12)}
+          <div class="meter-f"><span><b>{min(_pct_renda, 999):.0f}%</b> da meta</span><span>Faltam <b>{fmt_moeda(max(0.0, meta_r - _media12))}</b> por mês</span></div>
+        </div>
+        """)
+        md("<div class='insight'><div>A renda passiva é calculada com os proventos marcados como <b>recebidos</b> na aba Dividendos.</div></div>")
 
 # ==============================================================================
 # ROTAS: nome do menu -> função da página
