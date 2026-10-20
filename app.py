@@ -24,7 +24,7 @@ import urllib.request
 import urllib.parse
 import calendar
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 
 try:
     from zoneinfo import ZoneInfo
@@ -3479,36 +3479,40 @@ def pagina_conta_debito() -> None:
         col_m1, col_m2 = st.columns(2, gap="large")
         with col_m1:
             with st.container(border=True):
-                titulo_grafico("Saldo da conta ao longo do mês", "Saldo no fim de cada dia (entradas menos saídas)")
-                # saldo acumulado por DIA (várias movimentações no mesmo dia viram um único ponto)
-                _liq = {}
+                _saidas_dia, _qtd_dia = {}, {}
                 for _t in transacoes_mes:
-                    _d = int(_t["data"][8:10])
-                    _liq[_d] = _liq.get(_d, 0.0) + (float(_t["valor"]) if _t["tipo"] == "Entrada (+)" else -float(_t["valor"]))
-                _ult_dia_mes = calendar.monthrange(ano_deb, mes_deb)[1]
+                    if _t["tipo"] == "Saída (-)":
+                        _d = int(_t["data"][8:10])
+                        _saidas_dia[_d] = _saidas_dia.get(_d, 0.0) + float(_t["valor"])
+                        _qtd_dia[_d] = _qtd_dia.get(_d, 0) + 1
                 _hoje_m = hoje_br()
+                _ult_dia_mes = calendar.monthrange(ano_deb, mes_deb)[1]
                 if (ano_deb, mes_deb) < (_hoje_m.year, _hoje_m.month):
                     _ate = _ult_dia_mes
                 elif (ano_deb, mes_deb) == (_hoje_m.year, _hoje_m.month):
-                    _ate = max(_hoje_m.day, max(_liq))
+                    _ate = _hoje_m.day
                 else:
-                    _ate = max(_liq)
-                _dts, _sal, _acum = [], [], 0.0
-                for _d in range(1, _ate + 1):
-                    _acum += _liq.get(_d, 0.0)
-                    _dts.append(date(ano_deb, mes_deb, _d)); _sal.append(round(_acum, 2))
-                _dias_mov = [i for i, _d in enumerate(range(1, _ate + 1)) if _d in _liq]
-                fig_acum = go.Figure()
-                fig_acum.add_scatter(x=_dts, y=_sal, mode="lines", name="Saldo", line=dict(color=COR_BRAND, width=3, shape="hv"),
-                                     fill="tozeroy", fillcolor="rgba(15,118,110,.10)", hoverinfo="skip")
-                fig_acum.add_scatter(x=[_dts[i] for i in _dias_mov], y=[_sal[i] for i in _dias_mov], mode="markers", name="Dia com movimentação",
-                                     marker=dict(size=8, color="#FFFFFF", line=dict(color=COR_BRAND, width=2)),
-                                     customdata=[_liq[_dts[i].day] for i in _dias_mov],
-                                     hovertemplate="<b>%{x|%d/%m}</b><br>Saldo: R$ %{y:,.2f}<br>Movimento do dia: R$ %{customdata:,.2f}<extra></extra>")
-                estilizar(fig_acum, ALTURA_CARD, legenda=False, margin=dict(l=10, r=24, t=10, b=10))
-                fig_acum.update_xaxes(tickformat="%d/%m", nticks=7, range=[_dts[0] - timedelta(hours=10), _dts[-1] + timedelta(hours=10)])
-                fig_acum.update_yaxes(tickprefix="R$ ", tickformat=",.0f", zeroline=True, zerolinecolor="#CBD5E1")
-                mostrar(fig_acum)
+                    _ate = max(_saidas_dia) if _saidas_dia else _ult_dia_mes
+                _ate = max(_ate, max(_saidas_dia) if _saidas_dia else 1)
+                if _saidas_dia:
+                    _media_dia = sum(_saidas_dia.values()) / _ate
+                    titulo_grafico("Saídas por dia", f"Quanto saiu da conta em cada dia · média de {fmt_moeda(_media_dia)} por dia")
+                    _dias = list(range(1, _ate + 1))
+                    _vals = [_saidas_dia.get(d, 0.0) for d in _dias]
+                    _pico = max(_vals)
+                    _cores = ["#BE123C" if v == _pico else "#F43F5E" for v in _vals]
+                    fig_dia = go.Figure(go.Bar(
+                        x=[date(ano_deb, mes_deb, d) for d in _dias], y=_vals, marker=dict(color=_cores, cornerradius=4),
+                        customdata=[_qtd_dia.get(d, 0) for d in _dias],
+                        hovertemplate="<b>%{x|%d/%m}</b><br>Saiu: R$ %{y:,.2f}<br>%{customdata} lançamento(s)<extra></extra>"))
+                    fig_dia.add_hline(y=_media_dia, line=dict(color="#64748B", width=1.5, dash="dash"))
+                    estilizar(fig_dia, ALTURA_CARD, legenda=False, margin=dict(l=10, r=10, t=10, b=10), bargap=0.25)
+                    fig_dia.update_xaxes(tickformat="%d/%m", nticks=8)
+                    fig_dia.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
+                    mostrar(fig_dia)
+                else:
+                    titulo_grafico("Saídas por dia", "Quanto saiu da conta em cada dia")
+                    vazio("Nenhuma saída neste mês.")
         with col_m2:
             with st.container(border=True):
                 titulo_grafico("Saídas por categoria", "Onde o dinheiro da conta foi parar")
