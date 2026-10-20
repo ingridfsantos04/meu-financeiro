@@ -1903,21 +1903,31 @@ def despesas_por_categoria(chave):
     return pd.DataFrame(linhas, columns=["origem", "categoria", "valor"])
 
 def fig_fluxo_mes(entradas, caixinha, fatura, contas, debito, nome_caixinha="Caixinha"):
-    """Cascata: de onde vem o dinheiro e para onde ele vai até chegar ao saldo livre."""
-    saldo = entradas + caixinha - fatura - contas - debito
-    rot = ["Entradas", "Caixinha", "Cartão", "Contas", "Débito", "Saldo"]
-    val = [entradas, caixinha, -fatura, -contas, -debito, 0]
-    txt = [fmt_moeda(entradas), fmt_moeda(caixinha), "-" + fmt_moeda(fatura), "-" + fmt_moeda(contas), "-" + fmt_moeda(debito), fmt_moeda(saldo)]
-    fig = go.Figure(go.Waterfall(
-        x=rot, y=val, measure=["relative"] * 5 + ["total"], text=txt, textposition="outside", cliponaxis=False,
-        connector=dict(line=dict(color="#CBD5E1", width=1, dash="dot")),
-        increasing=dict(marker=dict(color=COR_ENTRADA)), decreasing=dict(marker=dict(color=COR_SAIDA)),
-        totals=dict(marker=dict(color=COR_BRAND if saldo >= 0 else "#991B1B")),
-        hovertemplate="<b>%{x}</b><br>%{text}<extra></extra>"))
-    estilizar(fig, ALTURA_CARD, legenda=False, margin=dict(l=10, r=10, t=34, b=10))
-    fig.update_xaxes(tickangle=0, tickfont=dict(size=11, color="#334155"))
-    fig.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
-    fig.update_traces(textfont=dict(size=11, color="#0B1220"))
+    """Duas barras empilhadas e proporcionais: o que você tem disponível x para onde vai o dinheiro.
+    Muito mais legível que uma cascata quando um dos valores (ex.: caixinha) é bem maior que os outros."""
+    comp = [
+        ("Disponível", "Entradas do mês", entradas, "#059669"),
+        ("Disponível", "Caixinha de fluxo", caixinha, "#5EEAD4"),
+        ("Despesas", "Cartão", fatura, "#2563EB"),
+        ("Despesas", "Contas fixas", contas, "#E11D48"),
+        ("Despesas", "Débito / PIX", debito, "#F59E0B"),
+    ]
+    maior = max(entradas + caixinha, fatura + contas + debito, 1.0)
+    fig = go.Figure()
+    for linha, nome, valor, cor in comp:
+        if valor <= 0:
+            continue
+        mostra_texto = valor / maior >= 0.16
+        fig.add_bar(
+            y=[linha], x=[valor], name=f"{nome} · {fmt_moeda(valor)}", orientation="h", marker=dict(color=cor, line=dict(color="#FFFFFF", width=2)),
+            text=[fmt_moeda(valor, 0)] if mostra_texto else [""], textposition="inside", insidetextanchor="middle", textangle=0,
+            textfont=dict(size=12, color="#FFFFFF" if cor != "#5EEAD4" else "#0B4F4A"),
+            hovertemplate=f"<b>{nome}</b><br>R$ %{{x:,.2f}}<extra></extra>")
+    estilizar(fig, ALTURA_CARD, barmode="stack", bargap=0.3, margin=dict(l=10, r=10, t=10, b=10),
+              uniformtext=dict(minsize=10, mode="hide"))
+    fig.update_layout(legend=dict(orientation="h", x=0, xanchor="left", y=-0.1, yanchor="top", font=dict(size=11), title=None, traceorder="normal"))
+    fig.update_xaxes(showgrid=True, gridcolor=GRADE_GRAFICO, tickprefix="R$ ", tickformat=",.0f", zeroline=False, showline=False)
+    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(size=13, color="#0B1220"), showline=False)
     return fig
 
 def fig_evolucao(lista_meses):
@@ -1955,16 +1965,16 @@ def fig_despesas_top(df, n=6):
     top = g.head(n)
     resto = float(g.iloc[n:].sum())
     if resto > 0:
-        top = pd.concat([top, pd.Series({"Outras": resto})])
+        top = pd.concat([top, pd.Series({"Demais categorias": resto})])
     total = float(g.sum()) or 1.0
-    cores = [COR_NEUTRA if r == "Outras" else "#F43F5E" for r in top.index]
+    cores = [COR_NEUTRA if r == "Demais categorias" else "#F43F5E" for r in top.index]
     textos = [f"{fmt_moeda(v)}  ·  {v / total * 100:.0f}%" for v in top.values]
     fig = go.Figure(go.Bar(x=top.values, y=list(top.index), orientation="h", marker=dict(color=cores, cornerradius=6),
                            text=textos, textposition="outside", cliponaxis=False, textfont=dict(size=11, color="#334155"),
                            hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>"))
     estilizar(fig, ALTURA_CARD, legenda=False, margin=dict(l=10, r=125, t=10, b=10), bargap=0.42)
-    fig.update_xaxes(showgrid=False, showticklabels=False, zeroline=False)
-    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(size=12, color="#334155"))
+    fig.update_xaxes(showgrid=False, showticklabels=False, zeroline=False, showline=False)
+    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(size=12, color="#334155"), showline=False)
     return fig
 
 def fig_categorias(df):
@@ -2045,7 +2055,7 @@ def fig_barras_simples(rotulos, valores, cor=COR_AZUL, altura=280, min_barras=0)
                            text=[fmt_moeda(v) for v in valores], textposition="outside", cliponaxis=False,
                            hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>"))
     estilizar(fig, altura, legenda=False, margin=dict(l=10, r=90, t=10, b=10), bargap=0.4)
-    fig.update_xaxes(showgrid=False, showticklabels=False)
+    fig.update_xaxes(showgrid=False, showticklabels=False, zeroline=False, showline=False)
     if len(rotulos) < min_barras:  # poucas barras: mantém espessura padrão, alinhadas ao topo
         fig.update_yaxes(showgrid=False, range=[min_barras - 0.5, -0.5])
     else:
@@ -2200,14 +2210,20 @@ def pagina_visao_geral() -> None:
     col_f1, col_f2 = st.columns(2, gap="large")
     with col_f1:
         with st.container(border=True):
-            titulo_grafico("Do dinheiro disponível ao saldo livre", "Entradas e caixinha menos as despesas")
+            titulo_grafico("Disponível x despesas", "O que você tem para o mês e para onde o dinheiro vai")
             mostrar(fig_fluxo_mes(total_entradas_mes, saldo_fluxo, fatura_cartao_mes, total_contas_fixas_mes, saidas_debito_mes))
+            _cls_s = "" if saldo_livre_consolidado >= 0 else "style='background:#FEF2F2;border-color:#FECACA;color:#991B1B;margin:.2rem 0 0'"
+            _cls_s = _cls_s or "style='margin:.2rem 0 0'"
+            md(f"<div class='insight' {_cls_s}><div>Saldo livre do mês: <b>{fmt_moeda(saldo_livre_consolidado)}</b></div></div>")
     with col_f2:
         with st.container(border=True):
             titulo_grafico("Despesas por categoria", "As maiores categorias do mês")
             _fig_desp = fig_despesas_top(despesas_por_categoria(chave_mes_vg))
             if _fig_desp is not None:
                 mostrar(_fig_desp)
+                _disp = total_entradas_mes + saldo_fluxo
+                _pct_d = (total_despesas_mes / _disp * 100) if _disp > 0 else 0.0
+                md(f"<div class='insight' style='margin:.2rem 0 0'><div>Despesas do mês: <b>{fmt_moeda(total_despesas_mes)}</b> ({_pct_d:.0f}% do disponível)</div></div>")
             else:
                 vazio("Nenhuma despesa registrada neste mês.")
 
@@ -3463,18 +3479,35 @@ def pagina_conta_debito() -> None:
         col_m1, col_m2 = st.columns(2, gap="large")
         with col_m1:
             with st.container(border=True):
-                titulo_grafico("Saldo acumulado no mês", "Como o saldo da conta evoluiu a cada movimentação")
-                _acum, _xs, _ys = 0.0, [], []
-                for _t in sorted(transacoes_mes, key=lambda t: (t["data"], t["id"])):
-                    _acum += float(_t["valor"]) if _t["tipo"] == "Entrada (+)" else -float(_t["valor"])
-                    _xs.append(datetime.strptime(_t["data"], "%Y-%m-%d")); _ys.append(_acum)
-                fig_acum = go.Figure(go.Scatter(x=_xs, y=_ys, mode="lines+markers", line=dict(color=COR_BRAND, width=3, shape="hv"),
-                                                fill="tozeroy", fillcolor="rgba(15,118,110,.10)",
-                                                marker=dict(size=8, color="#FFFFFF", line=dict(color=COR_BRAND, width=2)),
-                                                hovertemplate="<b>%{x|%d/%m}</b><br>Saldo: R$ %{y:,.2f}<extra></extra>"))
-                estilizar(fig_acum, ALTURA_CARD, legenda=False, margin=dict(l=10, r=30, t=10, b=10))
-                fig_acum.update_xaxes(tickformat="%d/%m", range=[min(_xs) - timedelta(hours=14), max(_xs) + timedelta(hours=14)])
-                fig_acum.update_yaxes(tickprefix="R$ ", tickformat=",.0f")
+                titulo_grafico("Saldo da conta ao longo do mês", "Saldo no fim de cada dia (entradas menos saídas)")
+                # saldo acumulado por DIA (várias movimentações no mesmo dia viram um único ponto)
+                _liq = {}
+                for _t in transacoes_mes:
+                    _d = int(_t["data"][8:10])
+                    _liq[_d] = _liq.get(_d, 0.0) + (float(_t["valor"]) if _t["tipo"] == "Entrada (+)" else -float(_t["valor"]))
+                _ult_dia_mes = calendar.monthrange(ano_deb, mes_deb)[1]
+                _hoje_m = hoje_br()
+                if (ano_deb, mes_deb) < (_hoje_m.year, _hoje_m.month):
+                    _ate = _ult_dia_mes
+                elif (ano_deb, mes_deb) == (_hoje_m.year, _hoje_m.month):
+                    _ate = max(_hoje_m.day, max(_liq))
+                else:
+                    _ate = max(_liq)
+                _dts, _sal, _acum = [], [], 0.0
+                for _d in range(1, _ate + 1):
+                    _acum += _liq.get(_d, 0.0)
+                    _dts.append(date(ano_deb, mes_deb, _d)); _sal.append(round(_acum, 2))
+                _dias_mov = [i for i, _d in enumerate(range(1, _ate + 1)) if _d in _liq]
+                fig_acum = go.Figure()
+                fig_acum.add_scatter(x=_dts, y=_sal, mode="lines", name="Saldo", line=dict(color=COR_BRAND, width=3, shape="hv"),
+                                     fill="tozeroy", fillcolor="rgba(15,118,110,.10)", hoverinfo="skip")
+                fig_acum.add_scatter(x=[_dts[i] for i in _dias_mov], y=[_sal[i] for i in _dias_mov], mode="markers", name="Dia com movimentação",
+                                     marker=dict(size=8, color="#FFFFFF", line=dict(color=COR_BRAND, width=2)),
+                                     customdata=[_liq[_dts[i].day] for i in _dias_mov],
+                                     hovertemplate="<b>%{x|%d/%m}</b><br>Saldo: R$ %{y:,.2f}<br>Movimento do dia: R$ %{customdata:,.2f}<extra></extra>")
+                estilizar(fig_acum, ALTURA_CARD, legenda=False, margin=dict(l=10, r=24, t=10, b=10))
+                fig_acum.update_xaxes(tickformat="%d/%m", nticks=7, range=[_dts[0] - timedelta(hours=10), _dts[-1] + timedelta(hours=10)])
+                fig_acum.update_yaxes(tickprefix="R$ ", tickformat=",.0f", zeroline=True, zerolinecolor="#CBD5E1")
                 mostrar(fig_acum)
         with col_m2:
             with st.container(border=True):
@@ -3486,6 +3519,8 @@ def pagina_conta_debito() -> None:
                         _sc[_k] = _sc.get(_k, 0.0) + float(_t["valor"])
                 if _sc:
                     _so = sorted(_sc.items(), key=lambda kv: kv[1], reverse=True)
+                    if len(_so) > 7:
+                        _so = _so[:7] + [("Demais categorias", sum(v for _, v in _so[7:]))]
                     mostrar(fig_barras_simples([k for k, _ in _so], [v for _, v in _so], "#F43F5E", ALTURA_CARD, min_barras=6))
                 else:
                     vazio("Nenhuma saída neste mês.")
@@ -3494,7 +3529,7 @@ def pagina_conta_debito() -> None:
     if not transacoes_mes:
         vazio(f"Nenhuma movimentação lançada em {nome_mes_deb}/{ano_deb}.", "🏦")
     else:
-        for t in reversed(transacoes_mes):
+        for t in sorted(transacoes_mes, key=lambda x: (x["data"], x["id"]), reverse=True):
             eh_ent = t["tipo"] == "Entrada (+)"
             cor_val = "#15803D" if eh_ent else "#B91C1C"
             sinal = "+" if eh_ent else "-"
