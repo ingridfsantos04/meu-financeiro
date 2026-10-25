@@ -2929,15 +2929,25 @@ def fig_resultado_ativos(df):
     d = df.sort_values("lucro_reais")
     cores = [COR_ENTRADA if v >= 0 else COR_SAIDA for v in d["lucro_reais"]]
     textos = [f"{fmt_moeda(v)}  ·  {fmt_pct(p)}" for v, p in zip(d["lucro_reais"], d["rentabilidade_pct"])]
-    fig = go.Figure(go.Bar(x=d["lucro_reais"], y=d["ticker"], orientation="h", marker=dict(color=cores, cornerradius=5),
-                           text=textos, textposition="outside", cliponaxis=False,
-                           hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>"))
-    estilizar(fig, max(ALTURA_CARD, 38 * len(d) + 90), legenda=False, margin=dict(l=10, r=135, t=10, b=10), bargap=0.4)
-    fig.update_xaxes(showticklabels=False, showgrid=False, zeroline=True, zerolinecolor="#94A3B8")
-    n_barras = len(d)
-    if n_barras < 6:  # mantém espessura padrão: reserva espaço vazio embaixo
-        fig.update_yaxes(range=[-(6 - n_barras) - 0.5, n_barras - 0.5])
-    fig.update_yaxes(showgrid=False)
+    fig = go.Figure(go.Bar(
+        x=d["lucro_reais"],
+        y=d["ticker"],
+        orientation="h",
+        marker=dict(color=cores, cornerradius=6),
+        text=textos,
+        textposition="outside",
+        cliponaxis=False,
+        textfont=dict(size=11, color="#334155", family="Plus Jakarta Sans, sans-serif"),
+        hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>"
+    ))
+    estilizar(fig, max(ALTURA_CARD, 42 * len(d) + 60), legenda=False, margin=dict(l=85, r=140, t=15, b=15), bargap=0.35)
+    fig.update_xaxes(showticklabels=False, showgrid=True, gridcolor=GRADE_GRAFICO, zeroline=True, zerolinecolor="#94A3B8", zerolinewidth=1.5)
+    fig.update_yaxes(
+        showgrid=False,
+        type="category",
+        automargin=True,
+        tickfont=dict(size=12, color="#0F172A", family="Plus Jakarta Sans, sans-serif")
+    )
     return fig
 
 def fig_projecao_faturas(chaves, projecao, chave_sel):
@@ -3823,13 +3833,32 @@ def pagina_carteira() -> None:
             res_usd = usd_total * cot_agora - inv_usd
             cor_usd = "#15803D" if res_usd >= 0 else "#B91C1C"
             md(f"""
-            <div style="background:linear-gradient(135deg,#ECFEFF,#FFFFFF 70%);border:1px solid #A5F3FC;border-radius:18px;padding:18px 24px;margin-bottom:1.3rem;box-shadow:0 1px 3px rgba(11,18,32,.05)">
-              <div style="font-size:.76rem;font-weight:800;color:#0E7490;margin-bottom:12px;letter-spacing:.1em;text-transform:uppercase">💵 Meus dólares (Nomad)</div>
-              <div style="display:flex;gap:40px;flex-wrap:wrap">
-                <div><div style="font-size:1.45rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">US$ {fmt_num(usd_total)}</div><div class="stat-l">Total em dólar</div></div>
-                <div><div style="font-size:1.45rem;font-weight:800;color:#0B1220;letter-spacing:-.02em">{fmt_moeda(cot_media, 4)}</div><div class="stat-l">Cotação média que paguei</div></div>
-                <div><div style="font-size:1.45rem;font-weight:800;color:#0891B2;letter-spacing:-.02em"><span class="live-dot"></span>{fmt_moeda(cot_agora, 4)}</div><div class="stat-l">Dólar agora</div></div>
-                <div><div style="font-size:1.45rem;font-weight:800;color:{cor_usd};letter-spacing:-.02em">{fmt_moeda(res_usd)}</div><div class="stat-l">Ganho / perda no câmbio</div></div>
+            <div class="exec-hero-card" style="margin-bottom:1.5rem;border-left:5px solid #0891B2 !important">
+              <div class="ehc-main">
+                <div class="ehc-eyebrow">
+                  <span class="live-dot"></span>
+                  <span>CONTA INTERNACIONAL NOMAD</span>
+                </div>
+                <div class="ehc-big-num" style="color:#FFFFFF">US$ {fmt_num(usd_total)}</div>
+                <div class="ehc-label">SALDO TOTAL EM DÓLAR AMERICANO</div>
+                <div class="ehc-sub">Patrimônio dolarizado protegido contra a desvalorização cambial.</div>
+              </div>
+              <div class="ehc-metrics">
+                <div class="ehc-tile">
+                  <span class="ehc-tile-l">Cotação Média</span>
+                  <span class="ehc-tile-v" style="color:#5EEAD4">{fmt_moeda(cot_media, 4)}</span>
+                  <span class="ehc-tile-s">Preço médio pago</span>
+                </div>
+                <div class="ehc-tile">
+                  <span class="ehc-tile-l">Cotação Agora</span>
+                  <span class="ehc-tile-v" style="color:#38BDF8">{fmt_moeda(cot_agora, 4)}</span>
+                  <span class="ehc-tile-s">Mercado ao vivo</span>
+                </div>
+                <div class="ehc-tile">
+                  <span class="ehc-tile-l">Resultado Câmbio</span>
+                  <span class="ehc-tile-v" style="color:{'#34D399' if res_usd>=0 else '#F87171'}">{fmt_moeda(res_usd)}</span>
+                  <span class="ehc-tile-s">Lucro / perda cambial</span>
+                </div>
               </div>
             </div>
             """)
@@ -3906,10 +3935,23 @@ def pagina_carteira() -> None:
         movs_todas = db.get("caixinhas_mov", [])
 
         md(f"""
-        <div class="card-pro" style="background:linear-gradient(135deg,#0A1628,#0E3447 70%,#0F766E 150%);border:none;color:#fff;position:relative;overflow:hidden">
-          <div style="font-size:.74rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5EEAD4">Total guardado em caixinhas</div>
-          <div style="font-size:2.4rem;font-weight:900;color:#fff;margin:6px 0;letter-spacing:-.035em">{fmt_moeda(total_em_caixinhas)}</div>
-          <div style="font-size:.88rem;color:#AFC0D2">Dinheiro seguro guardado para suas metas, reservas e planos pessoais.</div>
+        <div class="exec-hero-card status-positivo" style="margin-bottom:1.5rem">
+          <div class="ehc-main">
+            <div class="ehc-eyebrow">
+              <span class="ehc-status-dot"></span>
+              <span>RESERVA E POUPANÇA PATRIMONIAL</span>
+            </div>
+            <div class="ehc-big-num">{fmt_moeda(total_em_caixinhas)}</div>
+            <div class="ehc-label">TOTAL GUARDADO EM CAIXINHAS</div>
+            <div class="ehc-sub">Dinheiro seguro e protegido para seus objetivos, reservas e planos pessoais.</div>
+          </div>
+          <div class="ehc-metrics">
+            <div class="ehc-tile">
+              <span class="ehc-tile-l">Caixinhas Ativas</span>
+              <span class="ehc-tile-v" style="color:#5EEAD4">{len(caixinhas_lista)}</span>
+              <span class="ehc-tile-s">Metas em andamento</span>
+            </div>
+          </div>
         </div>
         """)
 
@@ -4267,11 +4309,13 @@ def pagina_cartao() -> None:
                     "data_compra": c["data_compra"], "ano_inicio": ano_ini, "mes_inicio": mes_ini
                 })
 
+    total_divida_que_falta = sum(it["saldo_restante"] for it in compras_do_mes)
+
     md(f"""
     <div class="stats" style="margin-top:1.2rem">
       <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(total_fatura_mes_sel)}</div><div class="stat-l">Fatura em {mes_fat_nome}/{ano_sel}</div></div>
       <div class="stat"><div class="stat-n" style="color:#15803D">+{fmt_moeda(total_cashback_mes_sel)}</div><div class="stat-l">Cashback no mês</div></div>
-      <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_divida_futura_restante)}</div><div class="stat-l">Dívida parcelada restante ({fmt_moeda(total_parcelada_futura_apos_sel)} nos próximos meses)</div></div>
+      <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_divida_que_falta)}</div><div class="stat-l">Dívida parcelada restante</div></div>
       <div class="stat"><div class="stat-n">{len(compras_do_mes)}</div><div class="stat-l">Compras nesta fatura</div></div>
     </div>
     """)
