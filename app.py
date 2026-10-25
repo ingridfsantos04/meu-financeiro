@@ -2930,37 +2930,28 @@ def fig_resultado_ativos(df):
     d["sigla"] = d["ticker"].astype(str).str.strip().str.upper()
     d = d.sort_values("lucro_reais")
     cores = [COR_ENTRADA if v >= 0 else COR_SAIDA for v in d["lucro_reais"]]
-    textos = [f"{fmt_moeda(v)}  ·  {fmt_pct(p)}" for v, p in zip(d["lucro_reais"], d["rentabilidade_pct"])]
-    
-    min_val = float(d["lucro_reais"].min()) if not d.empty else 0.0
-    max_val = float(d["lucro_reais"].max()) if not d.empty else 1.0
-    neg_range = min(min_val * 1.5, -max_val * 0.35, -15.0) if min_val < 0 else -max_val * 0.05
-    pos_range = max_val * 1.25 if max_val > 0 else 10.0
+    custom_d = [fmt_pct(p) for p in d["rentabilidade_pct"]]
 
     fig = go.Figure(go.Bar(
         x=d["lucro_reais"],
         y=d["sigla"],
         orientation="h",
         marker=dict(color=cores, cornerradius=6),
-        text=textos,
-        textposition="outside",
-        cliponaxis=False,
-        textfont=dict(size=11, color="#334155", family="Plus Jakarta Sans, sans-serif"),
-        hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>"
+        customdata=custom_d,
+        hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f} (%{customdata})<extra></extra>"
     ))
-    estilizar(fig, max(ALTURA_CARD, 42 * len(d) + 60), legenda=False, margin=dict(l=80, r=130, t=15, b=15), bargap=0.35)
+    estilizar(fig, max(ALTURA_CARD, 40 * len(d) + 50), legenda=False, margin=dict(l=75, r=25, t=15, b=25), bargap=0.35)
     fig.update_xaxes(
-        range=[neg_range, pos_range],
-        showticklabels=False,
         showgrid=True,
         gridcolor=GRADE_GRAFICO,
         zeroline=True,
         zerolinecolor="#94A3B8",
-        zerolinewidth=1.5
+        zerolinewidth=1.5,
+        tickprefix="R$ ",
+        tickformat=",.0f",
+        tickfont=dict(size=11, color="#64748B", family="Plus Jakarta Sans, sans-serif")
     )
     fig.update_yaxes(
-        anchor="free",
-        position=0,
         showgrid=False,
         type="category",
         automargin=True,
