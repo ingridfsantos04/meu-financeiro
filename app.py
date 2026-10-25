@@ -197,16 +197,18 @@ def md(texto):
 def hero(titulo, sub):
     d = agora_br()
     data_txt = f"{DIAS_PT[d.weekday()]}, {d.day} de {MESES_PT[d.month-1].lower()} de {d.year}"
-    md(f"""<div class="hero-box">
-      <div class="hero-text">
-        <div class="hero-eyebrow">
-          <span class="live-dot"></span> {APP_NOME} &nbsp;·&nbsp; Gestão Financeira
+    md(f"""<div class="page-top-bar">
+      <div class="ptb-info">
+        <div class="ptb-eyebrow">
+          <span class="ptb-brand-dot"></span> {APP_NOME} &nbsp;·&nbsp; GESTÃO PATRIMONIAL
         </div>
-        <div class="hero-title">{titulo}</div>
-        <div class="hero-sub">{sub}</div>
+        <h1 class="ptb-title">{titulo}</h1>
+        <div class="ptb-sub">{sub}</div>
       </div>
-      <div class="hero-date">
-        <span>📅 {data_txt}</span>
+      <div class="ptb-action">
+        <div class="ptb-date-badge">
+          <span>📅 {data_txt}</span>
+        </div>
       </div>
     </div>""")
 
@@ -218,9 +220,15 @@ def vazio(msg, icone=None):
     ico = f"<div class='empty-i'>{icone}</div>" if icone else "<div class='empty-i'>📊</div>"
     md(f"<div class='empty'>{ico}<div>{msg}</div></div>")
 
-def kpi(valor, label, cor="#0F172A", tamanho="1.45rem", icone=None):
+def kpi(valor, label, cor="#0F172A", tamanho="1.42rem", icone=None):
     ico_html = f"<span class='kpi-ico'>{icone}</span>" if icone else ""
-    return f"<div class='kpi'><div class='kpi-top'><span class='kpi-l' title='{html.escape(str(label))}'>{label}</span>{ico_html}</div><div class='kpi-n' style='color:{cor};font-size:{tamanho}'>{valor}</div></div>"
+    return f"""<div class='kpi'>
+      <div class='kpi-top'>
+        <span class='kpi-l' title='{html.escape(str(label))}'>{label}</span>
+        {ico_html}
+      </div>
+      <div class='kpi-n' style='color:{cor};font-size:{tamanho}'>{valor}</div>
+    </div>"""
 
 def fmt_moeda(val, casas=2):
     if val is None or pd.isna(val):
@@ -576,6 +584,225 @@ h1, h2, h3, h4 {
 [data-testid="stSidebarCollapseButton"] button:hover {
   background: rgba(255,255,255,.12) !important;
 }
+
+/* ---------- Ribbon de Mercado Ao Vivo ---------- */
+.market-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: .65rem 1.15rem;
+  margin-bottom: 1.4rem;
+  box-shadow: var(--sh-xs);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.mr-left {
+  display: inline-flex;
+  align-items: center;
+  font-size: .74rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: var(--brand);
+  text-transform: uppercase;
+}
+.mr-scroll {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.mb-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: .84rem;
+  transition: all .15s ease;
+}
+.mb-pill:hover {
+  border-color: var(--brand-2);
+  transform: translateY(-1px);
+}
+.mb-sym {
+  font-weight: 800;
+  font-size: .72rem;
+  color: var(--ink-3);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mb-val {
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+.mb-tag {
+  font-size: .72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.mb-tag-up { color: var(--pos); background: var(--pos-bg); border: 1px solid var(--pos-border); }
+.mb-tag-down { color: var(--neg); background: var(--neg-bg); border: 1px solid var(--neg-border); }
+.mb-tag-flat { color: var(--ink-3); background: #F1F5F9; border: 1px solid #E2E8F0; }
+.mr-right {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--ink-4);
+}
+
+/* ---------- Header Executivo da Página ---------- */
+.page-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: .5rem 0 1.5rem;
+  margin-bottom: 1.6rem;
+  border-bottom: 1px solid var(--line);
+}
+.ptb-info { flex: 1; min-width: 280px; }
+.ptb-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 1px solid #CCFBF1;
+  padding: 3px 12px;
+  border-radius: 999px;
+  margin-bottom: .5rem;
+}
+.ptb-brand-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--brand-2);
+}
+.ptb-title {
+  font-size: 2.1rem !important;
+  font-weight: 900 !important;
+  color: var(--ink) !important;
+  letter-spacing: -.035em !important;
+  margin: 0 !important;
+  line-height: 1.2 !important;
+}
+.ptb-sub {
+  color: var(--ink-3);
+  font-size: .92rem;
+  margin-top: .4rem;
+  line-height: 1.5;
+  max-width: 820px;
+}
+.ptb-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ptb-date-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  box-shadow: var(--sh-xs);
+  white-space: nowrap;
+}
+
+/* ---------- Card Executivo de Saldo & Visão Geral ---------- */
+.exec-hero-card {
+  background: linear-gradient(135deg, #0A1124 0%, #0F1C36 55%, #0B2B38 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--r-xl);
+  padding: 1.8rem 2.2rem;
+  margin-bottom: 1.8rem;
+  box-shadow: 0 10px 30px -5px rgba(10,17,36,0.25), 0 0 0 1px rgba(255,255,255,0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.exec-hero-card::before {
+  content: "";
+  position: absolute;
+  top: -80px; right: -60px; width: 280px; height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20,184,166,0.22), transparent 70%);
+  pointer-events: none;
+}
+.exec-hero-card.status-positivo { border-left: 6px solid #10B981 !important; }
+.exec-hero-card.status-negativo { border-left: 6px solid #F43F5E !important; }
+.ehc-main { flex: 1; min-width: 270px; z-index: 1; }
+.ehc-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .74rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #5EEAD4;
+  margin-bottom: .6rem;
+}
+.ehc-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #10B981; }
+.exec-hero-card.status-negativo .ehc-status-dot { background: #F43F5E; }
+.ehc-big-num {
+  font-size: 2.6rem;
+  font-weight: 900;
+  color: #FFFFFF;
+  letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.ehc-label {
+  font-size: .72rem;
+  font-weight: 800;
+  color: #94A3B8;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.ehc-sub {
+  font-size: .88rem;
+  color: #CBD5E1;
+  margin-top: .6rem;
+  max-width: 520px;
+  line-height: 1.5;
+}
+.ehc-sub b { color: #FFFFFF; }
+.ehc-metrics {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 1.1rem 1.4rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 1;
+  flex-wrap: wrap;
+}
+.ehc-tile { display: flex; flex-direction: column; gap: 3px; min-width: 135px; }
+.ehc-tile-l { font-size: .7rem; font-weight: 700; text-transform: uppercase; color: #94A3B8; letter-spacing: .06em; }
+.ehc-tile-v { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.ehc-tile-s { font-size: .72rem; color: #64748B; }
 
 /* ---------- Hero Banner Executivo ---------- */
 .hero-box {
@@ -1118,6 +1345,70 @@ section[data-testid="stSidebar"] input {
 }
 section[data-testid="stSidebar"] [data-baseweb="input"] { background: transparent !important; }
 section[data-testid="stSidebar"] label p { color: #E2E8F0 !important; font-weight: 600 !important; font-size: .88rem !important; }
+
+/* ---------- Sidebar Brand & User ---------- */
+.side-brand-box {
+  padding: .4rem 0 1.2rem;
+  margin-bottom: .8rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.side-logo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+.side-logo-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #14B8A6, #0F766E);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: #FFFFFF !important;
+  font-size: .95rem;
+  letter-spacing: .04em;
+  box-shadow: 0 4px 16px rgba(20,184,166,0.4);
+}
+.side-logo-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  color: #FFFFFF !important;
+  line-height: 1.15;
+}
+.side-logo-badge {
+  font-size: .64rem;
+  font-weight: 800;
+  color: #5EEAD4 !important;
+  letter-spacing: .12em;
+}
+.side-user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: .6rem .85rem;
+}
+.side-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1E293B, #0F172A);
+  border: 1.5px solid #14B8A6;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: .78rem;
+  color: #FFFFFF !important;
+  flex-shrink: 0;
+}
+.side-user-info { display: flex; flex-direction: column; }
+.side-user-name { font-size: .86rem; font-weight: 700; color: #FFFFFF !important; line-height: 1.2; }
+.side-user-status { font-size: .7rem; color: #94A3B8 !important; display: flex; align-items: center; gap: 4px; }
 
 .brand {
   display: flex;
@@ -2122,14 +2413,23 @@ def _sincronizar_menu(origem):
 
 with st.sidebar:
     md(f"""
-    <div class="brand">
-      <div class="brand-mark">{html.escape(iniciais)}</div>
-      <div>
-        <div class="brand-name">{html.escape(NOME_USUARIO_LOGADO)}</div>
-        <div class="brand-sub">{APP_NOME}</div>
+    <div class="side-brand-box">
+      <div class="side-logo-wrap">
+        <div class="side-logo-icon">INV</div>
+        <div>
+          <div class="side-logo-title">INVESTIMENTOS</div>
+          <div class="side-logo-badge">PATRIMONIAL PRO</div>
+        </div>
+      </div>
+      <div class="side-user-card">
+        <div class="side-user-avatar">{html.escape(iniciais)}</div>
+        <div class="side-user-info">
+          <div class="side-user-name">{html.escape(NOME_USUARIO_LOGADO)}</div>
+          <div class="side-user-status"><span class="live-dot"></span>Base Online Ativa</div>
+        </div>
       </div>
     </div>
-    <div class="side-label" style="margin-top:0">Menu</div>
+    <div class="side-label" style="margin-top:0">Navegação Principal</div>
     """)
 
     _SLUGS = {m: "".join(ch for ch in unicodedata.normalize("NFKD", m.lower()) if not unicodedata.combining(ch)).replace(" & ", "-").replace(" ", "-") for m in MENU_ITENS}
@@ -2141,10 +2441,10 @@ with st.sidebar:
 
     ICONES_MENU = {
         "Visão Geral": "📊  Visão Geral",
-        "Resumo": "🧭  Resumo & Diagnóstico",
+        "Resumo": "🧭  Resumo Executivo",
         "Contas Fixas": "📅  Contas Fixas",
         "Minha Carteira": "💼  Minha Carteira",
-        "Dividendos": "💰  Dividendos",
+        "Dividendos": "💰  Agenda de Dividendos",
         "Cartão de Crédito": "💳  Cartão de Crédito",
         "Movimentações": "🏦  Movimentações",
         "Devedores": "🤝  Devedores",
@@ -2277,13 +2577,13 @@ def _card_cotacao(nome, q, tipo="moeda", casas=2):
         v = fmt_num(q["preco"], 0) + " pts"
     pct = q.get("pct")
     if pct is None:
-        p_html = "<div class='tk-p tk-flat'>— ao vivo</div>"
+        p_html = "<span class='mb-tag mb-tag-flat'>—</span>"
     else:
         pct = float(pct)
-        cls = "tk-up" if pct > 0 else ("tk-down" if pct < 0 else "tk-flat")
+        cls = "mb-tag-up" if pct > 0 else ("mb-tag-down" if pct < 0 else "mb-tag-flat")
         seta = "▲" if pct > 0 else ("▼" if pct < 0 else "■")
-        p_html = f"<div class='tk-p {cls}'>{seta} {fmt_pct(pct)} hoje</div>"
-    return f"<div class='tk'><div class='tk-n'>{nome}</div><div class='tk-v'>{v}</div>{p_html}</div>"
+        p_html = f"<span class='mb-tag {cls}'>{seta} {fmt_pct(pct)}</span>"
+    return f"<div class='mb-pill'><span class='mb-sym'>{nome}</span><span class='mb-val'>{v}</span>{p_html}</div>"
 
 def render_barra_cotacoes():
     with ThreadPoolExecutor(max_workers=3) as ex:
@@ -2299,12 +2599,20 @@ def render_barra_cotacoes():
     if ibov:
         cards_html += _card_cotacao("Ibovespa", ibov, tipo="pts")
 
-    md(
-        "<div class='ticker'>"
-        + cards_html
-        + f"<div class='tk-live'><b><span class='live-dot'></span>{status}</b><span>Atualizado às {hora}</span></div>"
-        + "</div>"
-    )
+    md(f"""
+    <div class="market-ribbon">
+      <div class="mr-left">
+        <span class="live-dot"></span>
+        <span class="mr-status">MERCADO {status}</span>
+      </div>
+      <div class="mr-scroll">
+        {cards_html}
+      </div>
+      <div class="mr-right">
+        <span>Atualizado às {hora}</span>
+      </div>
+    </div>
+    """)
 
 def _barra_ao_vivo():
     render_barra_cotacoes()
@@ -2679,11 +2987,13 @@ def pagina_visao_geral() -> None:
 
     hoje = hoje_br()
 
-    c_m1, c_m2 = st.columns([2.5, 1])
+    c_flt_title, c_m1, c_m2 = st.columns([2.6, 1.2, 0.9], vertical_alignment="center")
+    with c_flt_title:
+        md("<div class='period-filter-label'><span>📅</span> Período de Análise Financeira</div>")
     with c_m1:
-        mes_vg_idx = st.selectbox("Mês de Análise", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="vg_mes")
+        mes_vg_idx = st.selectbox("Mês de Análise", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="vg_mes", label_visibility="collapsed")
     with c_m2:
-        ano_vg = st.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="vg_ano")
+        ano_vg = st.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="vg_ano", label_visibility="collapsed")
 
     chave_mes_vg = f"{ano_vg:04d}-{mes_vg_idx:02d}"
     nome_mes_vg = MESES_PT[mes_vg_idx - 1]
@@ -2719,21 +3029,39 @@ def pagina_visao_geral() -> None:
 
     cor_borda = "#10B981" if esta_positivo else "#EF4444"
     cor_txt = "#047857" if esta_positivo else "#B91C1C"
-    bg_banner = "linear-gradient(135deg,#ECFDF5 0%,#FFFFFF 70%)" if esta_positivo else "linear-gradient(135deg,#FEF2F2 0%,#FFFFFF 70%)"
-    msg_titulo = f"Financeiro positivo · {nome_mes_vg}/{ano_vg}" if esta_positivo else f"Financeiro negativo · {nome_mes_vg}/{ano_vg}"
+    cls_status = "status-positivo" if esta_positivo else "status-negativo"
+    status_label = "Financeiro Saudável & Positivo" if esta_positivo else "Atenção: Saldo Negativo no Mês"
 
     md(f"""
-    <div class="banner" style="--accent:{cor_borda};background:{bg_banner}">
-      <div>
-        <div class="banner-t" style="color:{cor_txt}">{msg_titulo}</div>
-        <div class="banner-d">
-          Total disponível: <b>{fmt_moeda(total_recursos_disponiveis)}</b> (entradas + caixinha {html.escape(nome_cx_fluxo)}) · Despesas: <b>{fmt_moeda(total_despesas_mes)}</b>
-          <br>Sobra das receitas do mês: <b>{fmt_moeda(saldo_direto_receitas)}</b> (sem mexer na caixinha de reserva).
+    <div class="exec-hero-card {cls_status}">
+      <div class="ehc-main">
+        <div class="ehc-eyebrow">
+          <span class="ehc-status-dot"></span>
+          <span>{status_label} &nbsp;·&nbsp; {nome_mes_vg}/{ano_vg}</span>
+        </div>
+        <div class="ehc-big-num">{fmt_moeda(saldo_livre_consolidado)}</div>
+        <div class="ehc-label">SALDO LIVRE CONSOLIDADO NO MÊS</div>
+        <div class="ehc-sub">
+          Recursos totais <b>{fmt_moeda(total_recursos_disponiveis)}</b> &nbsp;·&nbsp; Despesas comprometidas <b>{fmt_moeda(total_despesas_mes)}</b>
+          <br>Sobra direta das receitas: <b style="color:#5EEAD4">{fmt_moeda(saldo_direto_receitas)}</b> (sem mexer na caixinha de reserva).
         </div>
       </div>
-      <div>
-        <div class="banner-v" style="color:{'#15803D' if esta_positivo else '#B91C1C'}">{fmt_moeda(saldo_livre_consolidado)}</div>
-        <div class="banner-vl">Saldo livre</div>
+      <div class="ehc-metrics">
+        <div class="ehc-tile">
+          <span class="ehc-tile-l">Total Recursos</span>
+          <span class="ehc-tile-v" style="color:#34D399">{fmt_moeda(total_recursos_disponiveis)}</span>
+          <span class="ehc-tile-s">Entradas + Caixinha {html.escape(nome_cx_fluxo)}</span>
+        </div>
+        <div class="ehc-tile">
+          <span class="ehc-tile-l">Total Despesas</span>
+          <span class="ehc-tile-v" style="color:#F87171">{fmt_moeda(total_despesas_mes)}</span>
+          <span class="ehc-tile-s">Cartão + Contas + Débito</span>
+        </div>
+        <div class="ehc-tile">
+          <span class="ehc-tile-l">Sobra das Receitas</span>
+          <span class="ehc-tile-v" style="color:{'#34D399' if saldo_direto_receitas>=0 else '#F87171'}">{fmt_moeda(saldo_direto_receitas)}</span>
+          <span class="ehc-tile-s">Sem usar caixinha</span>
+        </div>
       </div>
     </div>
     """)
@@ -2743,7 +3071,7 @@ def pagina_visao_geral() -> None:
     with col_c1:
         with st.container(border=True):
             md(kpi(f"+{fmt_moeda(total_entradas_mes)}", "Entradas no mês", "#15803D", icone="📥"))
-            with st.popover("Ver detalhes", use_container_width=True):
+            with st.popover("Ver detalhes ▾", use_container_width=True):
                 st.markdown(f"**Entradas em {nome_mes_vg}/{ano_vg}**")
                 st.write(f"• Conta / Débito: **{fmt_moeda(entradas_conta_mes)}**")
                 st.write(f"• Proventos/Dividendos: **{fmt_moeda(proventos_mes)}**")
@@ -2755,7 +3083,7 @@ def pagina_visao_geral() -> None:
     with col_c2:
         with st.container(border=True):
             md(kpi(f"+{fmt_moeda(saldo_fluxo)}", f"Caixinha ({html.escape(nome_cx_fluxo)})", "#0F766E", icone="🏦"))
-            with st.popover("Ver detalhes", use_container_width=True):
+            with st.popover("Ver detalhes ▾", use_container_width=True):
                 st.markdown(f"**Caixinha {html.escape(nome_cx_fluxo)}**")
                 st.write(f"• Saldo disponível: **{fmt_moeda(saldo_fluxo)}**")
                 if cx_fluxo:
@@ -2765,7 +3093,7 @@ def pagina_visao_geral() -> None:
     with col_c3:
         with st.container(border=True):
             md(kpi(f"-{fmt_moeda(fatura_cartao_mes)}", "Fatura do cartão", "#2563EB", icone="💳"))
-            with st.popover("Ver detalhes", use_container_width=True):
+            with st.popover("Ver detalhes ▾", use_container_width=True):
                 st.markdown(f"**Compras na fatura de {nome_mes_vg}/{ano_vg}**")
                 faturas_mes_itens = []
                 for c in db.get("cartao_compras", []):
@@ -2787,7 +3115,7 @@ def pagina_visao_geral() -> None:
     with col_c4:
         with st.container(border=True):
             md(kpi(f"-{fmt_moeda(total_contas_fixas_mes)}", "Contas fixas", "#B91C1C", icone="📅"))
-            with st.popover("Ver detalhes", use_container_width=True):
+            with st.popover("Ver detalhes ▾", use_container_width=True):
                 st.markdown(f"**Contas Fixas em {nome_mes_vg}/{ano_vg}**")
                 if not contas_mes:
                     st.caption("Nenhuma conta fixa cadastrada para este mês.")
@@ -2799,7 +3127,7 @@ def pagina_visao_geral() -> None:
     with col_c5:
         with st.container(border=True):
             md(kpi(f"-{fmt_moeda(saidas_debito_mes)}", "Débito & PIX", "#EA580C", icone="💸"))
-            with st.popover("Ver detalhes", use_container_width=True):
+            with st.popover("Ver detalhes ▾", use_container_width=True):
                 st.markdown(f"**Saídas no Débito em {nome_mes_vg}/{ano_vg}**")
                 if not trans_saidas_mes:
                     st.caption("Nenhuma saída no débito registrada.")
@@ -2919,9 +3247,13 @@ def pagina_resumo_diagnostico() -> None:
     hero("Resumo", "Veja quanto você tem, o que não deve gastar no mês e quanto pode gastar com segurança.")
 
     hoje = hoje_br()
-    c1, c2 = st.columns([2.5, 1])
-    m_diag = c1.selectbox("Mês do Diagnóstico", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="diag_mes")
-    a_diag = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="diag_ano")
+    c_flt_title, c1, c2 = st.columns([2.6, 1.2, 0.9], vertical_alignment="center")
+    with c_flt_title:
+        md("<div class='period-filter-label'><span>🧭</span> Período de Diagnóstico</div>")
+    with c1:
+        m_diag = c1.selectbox("Mês do Diagnóstico", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="diag_mes", label_visibility="collapsed")
+    with c2:
+        a_diag = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="diag_ano", label_visibility="collapsed")
     ch_diag = f"{a_diag:04d}-{m_diag:02d}"
 
     trans = db.get("transacoes_debito", [])
@@ -3007,11 +3339,13 @@ def pagina_contas_fixas() -> None:
 
     hoje = hoje_br()
 
-    c_m1, c_m2 = st.columns([2.5, 1])
+    c_flt_title, c_m1, c_m2 = st.columns([2.6, 1.2, 0.9], vertical_alignment="center")
+    with c_flt_title:
+        md("<div class='period-filter-label'><span>📅</span> Mês de Vencimento</div>")
     with c_m1:
-        mes_contas_idx = st.selectbox("Mês de Vencimento", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="sel_m_contas")
+        mes_contas_idx = st.selectbox("Mês de Vencimento", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="sel_m_contas", label_visibility="collapsed")
     with c_m2:
-        ano_contas = st.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="sel_a_contas")
+        ano_contas = st.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="sel_a_contas", label_visibility="collapsed")
 
     chave_mes_contas = f"{ano_contas:04d}-{mes_contas_idx:02d}"
     nome_mes_contas = MESES_PT[mes_contas_idx - 1]
@@ -3707,9 +4041,13 @@ def pagina_dividendos() -> None:
     hero("Agenda de Dividendos & Proventos", "Controle de proventos com cálculo automático e confirmação de recebimento.")
 
     hoje = hoje_br()
-    c1, c2 = st.columns([2.5, 1])
-    m_p = c1.selectbox("Mês", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="m_prov")
-    a_p = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="a_prov")
+    c_flt_title, c1, c2 = st.columns([2.6, 1.2, 0.9], vertical_alignment="center")
+    with c_flt_title:
+        md("<div class='period-filter-label'><span>💰</span> Mês dos Proventos</div>")
+    with c1:
+        m_p = c1.selectbox("Mês", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="m_prov", label_visibility="collapsed")
+    with c2:
+        a_p = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="a_prov", label_visibility="collapsed")
     chave_prv = f"{a_p:04d}-{m_p:02d}"
 
     col_auto, col_man = st.columns([2, 1], vertical_alignment="center")
@@ -3819,14 +4157,16 @@ def pagina_cartao() -> None:
         st.session_state["fatura_mes_num"] = mes_k
         st.session_state["fatura_ano_num"] = ano_k
 
-    c_f1, c_f2 = st.columns([2.5, 1])
+    c_flt_title, c_f1, c_f2 = st.columns([2.6, 1.2, 0.9], vertical_alignment="center")
+    with c_flt_title:
+        md("<div class='period-filter-label'><span>💳</span> Fatura de Referência</div>")
     with c_f1:
-        mes_fat_idx = st.selectbox("Mês da fatura", range(1, 13), index=st.session_state["fatura_mes_num"] - 1, format_func=lambda x: MESES_PT[x-1], key="sel_mfat")
+        mes_fat_idx = st.selectbox("Mês da fatura", range(1, 13), index=st.session_state["fatura_mes_num"] - 1, format_func=lambda x: MESES_PT[x-1], key="sel_mfat", label_visibility="collapsed")
         st.session_state["fatura_mes_num"] = mes_fat_idx
     with c_f2:
         anos_opcoes = [hoje.year - 1, hoje.year, hoje.year + 1, hoje.year + 2]
         idx_ano = anos_opcoes.index(st.session_state["fatura_ano_num"]) if st.session_state["fatura_ano_num"] in anos_opcoes else 1
-        ano_fat = st.selectbox("Ano da fatura", anos_opcoes, index=idx_ano, key="sel_afat")
+        ano_fat = st.selectbox("Ano da fatura", anos_opcoes, index=idx_ano, key="sel_afat", label_visibility="collapsed")
         st.session_state["fatura_ano_num"] = ano_fat
 
     mes_sel = st.session_state["fatura_mes_num"]
@@ -4034,9 +4374,13 @@ def pagina_conta_debito() -> None:
     hero("Movimentações", "Controle tudo o que entra e sai da sua conta à vista: salário, vale, PIX e débito.")
 
     hoje = hoje_br()
-    c1, c2 = st.columns([2.5, 1])
-    mes_deb = c1.selectbox("Mês do Extrato", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="deb_mes")
-    ano_deb = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="deb_ano")
+    c_flt_title, c1, c2 = st.columns([2.6, 1.2, 0.9], vertical_alignment="center")
+    with c_flt_title:
+        md("<div class='period-filter-label'><span>🏦</span> Mês do Extrato</div>")
+    with c1:
+        mes_deb = c1.selectbox("Mês do Extrato", range(1, 13), index=hoje.month - 1, format_func=lambda x: MESES_PT[x-1], key="deb_mes", label_visibility="collapsed")
+    with c2:
+        ano_deb = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="deb_ano", label_visibility="collapsed")
     chave_deb_sel = f"{ano_deb:04d}-{mes_deb:02d}"
     nome_mes_deb = MESES_PT[mes_deb - 1]
 
