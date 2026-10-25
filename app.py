@@ -2197,16 +2197,21 @@ components.html("""
 # FUNÇÕES DE CÁLCULO FINANCEIRO
 # ==============================================================================
 def inicio_fatura_compra(c):
-    if c.get("mes_inicio_fatura"):
-        try:
-            partes = c["mes_inicio_fatura"].split("-")
-            return int(partes[0]), int(partes[1])
-        except Exception:
-            pass
     try:
-        dt_compra = datetime.strptime(c["data_compra"], "%Y-%m-%d").date()
+        dt_compra = datetime.strptime(str(c["data_compra"]), "%Y-%m-%d").date()
     except Exception:
         dt_compra = hoje_br()
+
+    if c.get("mes_inicio_fatura"):
+        try:
+            partes = str(c["mes_inicio_fatura"]).split("-")
+            a_cand, m_cand = int(partes[0]), int(partes[1])
+            diff_meses = (a_cand - dt_compra.year) * 12 + (m_cand - dt_compra.month)
+            if 0 <= diff_meses <= 2:
+                return a_cand, m_cand
+        except Exception:
+            pass
+
     m = dt_compra.month + (1 if dt_compra.day >= DIA_FECHAMENTO_CARTAO else 0)
     a = dt_compra.year + (1 if m > 12 else 0)
     m = 1 if m > 12 else m
@@ -4214,6 +4219,7 @@ def pagina_cartao() -> None:
     total_fatura_mes_sel = 0.0
     total_cashback_mes_sel = 0.0
     total_divida_futura_restante = 0.0
+    total_parcelada_futura_apos_sel = 0.0
     compras_do_mes = []
     projecao_meses = {}
 
@@ -4242,8 +4248,11 @@ def pagina_cartao() -> None:
 
             projecao_meses[fat_chave] = projecao_meses.get(fat_chave, 0.0) + v_parc
 
-            if fat_chave >= fatura_atual_real_chave:
+            # Dívida parcelada restante: considera compras parceladas (p_tot > 1) que ainda possuem parcelas a pagar
+            if p_tot > 1 and fat_chave >= fatura_atual_real_chave:
                 total_divida_futura_restante += v_parc
+            if p_tot > 1 and fat_chave > fatura_chave_sel:
+                total_parcelada_futura_apos_sel += v_parc
 
             if fat_chave == fatura_chave_sel:
                 parc_restantes_depois = max(0, p_tot - p_idx)
@@ -4262,7 +4271,7 @@ def pagina_cartao() -> None:
     <div class="stats" style="margin-top:1.2rem">
       <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(total_fatura_mes_sel)}</div><div class="stat-l">Fatura em {mes_fat_nome}/{ano_sel}</div></div>
       <div class="stat"><div class="stat-n" style="color:#15803D">+{fmt_moeda(total_cashback_mes_sel)}</div><div class="stat-l">Cashback no mês</div></div>
-      <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_divida_futura_restante)}</div><div class="stat-l">Dívida total parcelada restante</div></div>
+      <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_divida_futura_restante)}</div><div class="stat-l">Dívida parcelada restante ({fmt_moeda(total_parcelada_futura_apos_sel)} nos próximos meses)</div></div>
       <div class="stat"><div class="stat-n">{len(compras_do_mes)}</div><div class="stat-l">Compras nesta fatura</div></div>
     </div>
     """)
