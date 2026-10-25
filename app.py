@@ -2926,12 +2926,20 @@ def legenda_html(rotulos, valores, cores):
     return f"<div class='leg'>{linhas}</div>"
 
 def fig_resultado_ativos(df):
-    d = df.sort_values("lucro_reais")
+    d = df.copy()
+    d["sigla"] = d["ticker"].astype(str).str.strip().str.upper()
+    d = d.sort_values("lucro_reais")
     cores = [COR_ENTRADA if v >= 0 else COR_SAIDA for v in d["lucro_reais"]]
     textos = [f"{fmt_moeda(v)}  ·  {fmt_pct(p)}" for v, p in zip(d["lucro_reais"], d["rentabilidade_pct"])]
+    
+    min_val = float(d["lucro_reais"].min()) if not d.empty else 0.0
+    max_val = float(d["lucro_reais"].max()) if not d.empty else 1.0
+    neg_range = min(min_val * 1.5, -max_val * 0.35, -15.0) if min_val < 0 else -max_val * 0.05
+    pos_range = max_val * 1.25 if max_val > 0 else 10.0
+
     fig = go.Figure(go.Bar(
         x=d["lucro_reais"],
-        y=d["ticker"],
+        y=d["sigla"],
         orientation="h",
         marker=dict(color=cores, cornerradius=6),
         text=textos,
@@ -2940,9 +2948,19 @@ def fig_resultado_ativos(df):
         textfont=dict(size=11, color="#334155", family="Plus Jakarta Sans, sans-serif"),
         hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>"
     ))
-    estilizar(fig, max(ALTURA_CARD, 42 * len(d) + 60), legenda=False, margin=dict(l=85, r=140, t=15, b=15), bargap=0.35)
-    fig.update_xaxes(showticklabels=False, showgrid=True, gridcolor=GRADE_GRAFICO, zeroline=True, zerolinecolor="#94A3B8", zerolinewidth=1.5)
+    estilizar(fig, max(ALTURA_CARD, 42 * len(d) + 60), legenda=False, margin=dict(l=80, r=130, t=15, b=15), bargap=0.35)
+    fig.update_xaxes(
+        range=[neg_range, pos_range],
+        showticklabels=False,
+        showgrid=True,
+        gridcolor=GRADE_GRAFICO,
+        zeroline=True,
+        zerolinecolor="#94A3B8",
+        zerolinewidth=1.5
+    )
     fig.update_yaxes(
+        anchor="free",
+        position=0,
         showgrid=False,
         type="category",
         automargin=True,
@@ -3610,11 +3628,11 @@ def pagina_carteira() -> None:
     hero("Minha Carteira", "Ações, FIIs, Cripto, Dólar e Caixinhas — com cotações em tempo real e Radar de Aportes da Bolsa.")
 
     aba_invest, aba_radar, aba_alt, aba_caixinhas, aba_vendas = st.tabs([
-        "Ações, FIIs e Renda Fixa",
-        "Radar da Bolsa",
-        "Cripto & Dólar",
-        "Caixinhas",
-        "Histórico de Vendas"
+        "📈  Ações, FIIs e Renda Fixa",
+        "🎯  Radar da Bolsa",
+        "🪙  Cripto & Dólar",
+        "📦  Caixinhas",
+        "📑  Histórico de Vendas"
     ])
 
     with aba_invest:
@@ -3735,7 +3753,12 @@ def pagina_carteira() -> None:
         st.divider()
         secao("Oportunidades do mercado aberto", "Ativos monitorados pelo mercado com preços atraentes ou altos pagamentos de dividendos.")
 
-        aba_m1, aba_m2, aba_m3, aba_m4 = st.tabs(["Fundos Imobiliários", "Ações da B3", "Dólar & Exterior", "Criptoativos"])
+        aba_m1, aba_m2, aba_m3, aba_m4 = st.tabs([
+            "🏢  Fundos Imobiliários",
+            "🏛️  Ações da B3",
+            "💵  Dólar & Exterior",
+            "₿  Criptoativos"
+        ])
 
         fii_mercado = [
             {"ticker": "MXRF11", "nome": "Maxi Renda FII", "classe": "FIIs", "preco_ref": 10.15, "motivo": "Maior número de cotistas da B3. Dividendos mensais consistentes (Yield ~11.5% a.a.).", "destaque": "💎 Queridinho dos Dividendos"},
