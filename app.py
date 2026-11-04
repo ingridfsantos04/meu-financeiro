@@ -1574,14 +1574,14 @@ section[data-testid="stSidebar"] label p { color: #E2E8F0 !important; font-weigh
 
 /* ---------- Controles Streamlit Nativos ---------- */
 [data-testid="stVerticalBlockBorderWrapper"] {
-  border-radius: var(--r-lg) !important;
+  border-radius: 18px !important;
   border-color: var(--line) !important;
   background: var(--paper) !important;
-  box-shadow: var(--sh-sm) !important;
-  transition: all .2s ease !important;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 1px 2px rgba(15,23,42,0.02) !important;
+  transition: all .25s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 [data-testid="stVerticalBlockBorderWrapper"]:hover {
-  box-shadow: var(--sh-md) !important;
+  box-shadow: 0 10px 24px -4px rgba(15,23,42,0.07) !important;
   border-color: #CBD5E1 !important;
 }
 .block-container > [data-testid="stVerticalBlockBorderWrapper"],
@@ -1593,15 +1593,16 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
 
 .stTextInput div[data-baseweb="input"], .stNumberInput div[data-baseweb="input"], .stDateInput div[data-baseweb="input"],
 .stSelectbox div[data-baseweb="select"] > div, .stTextArea div[data-baseweb="textarea"] {
-  border-radius: 10px !important;
+  border-radius: 12px !important;
   border-color: var(--line) !important;
   background: #FFFFFF !important;
   box-shadow: var(--sh-xs) !important;
+  transition: all 0.15s ease !important;
 }
 .stTextInput div[data-baseweb="input"]:focus-within, .stNumberInput div[data-baseweb="input"]:focus-within,
 .stDateInput div[data-baseweb="input"]:focus-within, .stSelectbox div[data-baseweb="select"] > div:focus-within {
-  border-color: var(--brand-2) !important;
-  box-shadow: 0 0 0 3px rgba(20,184,166,.18) !important;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px rgba(15,118,110,.16) !important;
 }
 .stApp label p, [data-testid="stWidgetLabel"] p {
   font-weight: 600 !important;
@@ -1611,14 +1612,15 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
 
 .stButton > button, .stFormSubmitButton > button, [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"],
 [data-testid="stBaseButton-secondaryFormSubmit"], [data-testid="stBaseButton-primaryFormSubmit"] {
-  border-radius: 10px !important;
-  font-weight: 600 !important;
-  transition: all .15s ease !important;
-  min-height: 2.45rem !important;
+  border-radius: 9999px !important;
+  font-weight: 700 !important;
+  transition: all .2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  min-height: 2.6rem !important;
+  padding: 0.55rem 1.4rem !important;
 }
 .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"],
 [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
-  background: linear-gradient(135deg, #14B8A6, #0F766E) !important;
+  background: linear-gradient(135deg, #0F766E 0%, #115E59 100%) !important;
   border: none !important;
   color: #FFFFFF !important;
   font-weight: 700 !important;
@@ -1626,23 +1628,25 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
 }
 .stButton > button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
+  transform: translateY(-1.5px) !important;
   box-shadow: 0 8px 20px rgba(15,118,110,.35) !important;
 }
 .stButton > button[kind="secondary"], [data-testid="stBaseButton-secondary"] {
   background: #FFFFFF !important;
-  border: 1px solid var(--line) !important;
+  border: 1.5px solid var(--line) !important;
   color: var(--ink) !important;
 }
 .stButton > button[kind="secondary"]:hover, [data-testid="stBaseButton-secondary"]:hover {
-  border-color: var(--brand-2) !important;
+  border-color: var(--brand) !important;
   color: var(--brand) !important;
+  background: var(--brand-soft) !important;
+  transform: translateY(-1px) !important;
 }
 
 /* Popovers e Modais */
 [data-testid="stPopover"] > button,
 [data-testid="stPopover"] button {
-  border-radius: 10px !important;
+  border-radius: 9999px !important;
   font-weight: 600 !important;
   font-size: 0.82rem !important;
   transition: all 0.15s ease !important;
@@ -1652,54 +1656,126 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
 }
 [data-testid="stPopover"] > button:hover,
 [data-testid="stPopover"] button:hover {
-  border-color: var(--brand-2) !important;
+  border-color: var(--brand) !important;
   color: var(--brand) !important;
   background: var(--brand-soft) !important;
   transform: translateY(-1px);
 }
 [data-testid="stPopoverBody"],
 div[data-baseweb="popover"] > div {
-  border-radius: 16px !important;
+  border-radius: 20px !important;
   border: 1px solid var(--line) !important;
   box-shadow: 0 20px 40px -8px rgba(15,23,42,0.18), 0 0 0 1px rgba(15,23,42,0.04) !important;
   background: #FFFFFF !important;
-  padding: 1.25rem 1.4rem !important;
+  padding: 1.35rem 1.5rem !important;
 }
 
-.stTabs [data-baseweb="tab-list"] {
-  background: #FFFFFF !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 14px !important;
+/* ==============================================================================
+   TABS ULTRA-MODERNAS (SEGMENTED PILL BAR) - 100% REDONDO (SEM CANTOS QUADRADOS)
+   ============================================================================== */
+[data-testid="stTabs"],
+.stTabs,
+div[data-testid="stTabs"] {
+  margin-top: 0.8rem !important;
+}
+
+/* Barra externa em pílula moderna */
+[data-testid="stTabs"] [data-baseweb="tab-list"],
+[data-testid="stTabs"] div[role="tablist"],
+.stTabs [data-baseweb="tab-list"],
+div[data-baseweb="tab-list"],
+div[role="tablist"] {
+  background: #F1F5F9 !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 9999px !important;
   padding: 6px 8px !important;
   gap: 6px !important;
-  box-shadow: 0 1px 3px rgba(15,23,42,0.04) !important;
-  margin-bottom: 1.6rem !important;
-  display: flex !important;
-  flex-wrap: wrap !important;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+  margin-bottom: 2rem !important;
+  display: inline-flex !important;
+  width: auto !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  border-bottom: none !important;
 }
-.stTabs [data-baseweb="tab"] {
-  height: 42px !important;
-  padding: 0 18px !important;
-  border-radius: 10px !important;
-  font-weight: 600 !important;
-  color: var(--ink-3) !important;
-  font-size: .88rem !important;
-  border: 1px solid transparent !important;
+
+/* Remove completamente linhas cinzas retas nativas */
+[data-testid="stTabs"] [data-baseweb="tab-border"],
+[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+.stTabs [data-baseweb="tab-border"],
+.stTabs [data-baseweb="tab-highlight"],
+div[data-baseweb="tab-border"],
+div[data-baseweb="tab-highlight"],
+[data-baseweb="tab-border"],
+[data-baseweb="tab-highlight"] {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  border: none !important;
   background: transparent !important;
-  transition: all .2s cubic-bezier(.16,1,.3,1) !important;
+  visibility: hidden !important;
 }
-.stTabs [data-baseweb="tab"]:hover {
-  color: var(--brand) !important;
-  background: rgba(15,118,110,0.06) !important;
+
+/* Cada botão de aba: 100% formato pílula arredondada */
+[data-testid="stTabs"] button[role="tab"],
+[data-testid="stTabs"] button[data-baseweb="tab"],
+[data-testid="stTabs"] button,
+.stTabs [data-baseweb="tab"],
+button[role="tab"],
+button[data-baseweb="tab"],
+[data-testid="stTab"] {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 9999px !important;
+  padding: 10px 22px !important;
+  height: auto !important;
+  min-height: 42px !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  color: #64748B !important;
+  white-space: nowrap !important;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
-.stTabs [aria-selected="true"] {
-  background: var(--brand) !important;
+
+/* Hover suave em cada aba */
+[data-testid="stTabs"] button[role="tab"]:hover,
+[data-testid="stTabs"] button[data-baseweb="tab"]:hover,
+button[role="tab"]:hover {
+  color: #0F172A !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-radius: 9999px !important;
+}
+
+/* ABA SELECIONADA: Pílula moderna com cantos 100% arredondados (nunca quadrada) */
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"],
+[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"],
+[data-testid="stTabs"] button[aria-selected="true"],
+[data-testid="stTabs"] [aria-selected="true"],
+.stTabs [data-baseweb="tab"][aria-selected="true"],
+.stTabs [aria-selected="true"],
+button[role="tab"][aria-selected="true"],
+button[data-baseweb="tab"][aria-selected="true"],
+[data-testid="stTab"][aria-selected="true"],
+div[role="tab"][aria-selected="true"] {
+  background: linear-gradient(135deg, #0F766E 0%, #115E59 100%) !important;
   color: #FFFFFF !important;
   font-weight: 800 !important;
-  box-shadow: 0 3px 10px rgba(15,118,110,0.3) !important;
+  border-radius: 9999px !important;
+  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.35) !important;
+  border: none !important;
 }
-.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
-.stTabs [data-baseweb="tab-border"] { display: none !important; }
+
+/* Força textos e ícones brancos na aba ativa */
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"] *,
+[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] *,
+[data-testid="stTabs"] [aria-selected="true"] *,
+.stTabs [aria-selected="true"] *,
+button[role="tab"][aria-selected="true"] * {
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}
 
 /* Chat IA - Fintech Executive Styling */
 [data-testid="stChatMessage"] {
@@ -2544,38 +2620,28 @@ def gerar_resposta_ia_carteira(pergunta, db_ref, df_ativos_ref, caixinhas_ref, p
             f"💡 *Dica:* Quando um ativo sólido cai abaixo do seu Preço Médio, pode ser uma boa oportunidade para aportar e **reduzir seu PM** se você confia nos fundamentos da empresa/fundo."
         )
 
-    if any(w in p_lower for w in ["caixinha", "cdi", "150%", "nubank", "rende", "rendimento da caixinha"]):
-        rd_150 = cdi_d * 1.5
-        taxa_150_anual = cdi_atual * 1.5
+    if any(w in p_lower for w in ["caixinha", "cdi", "rende", "rendimento da caixinha"]):
         if not caixinhas_ref:
-            ex_saldo = 5000.0
-            ex_dia = ex_saldo * rd_150
-            ex_mes = ex_saldo * (((1.0 + rd_150) ** 21) - 1.0)
-            ex_ano = ex_saldo * (((1.0 + rd_150) ** 252) - 1.0)
             return (
-                f"📦 **Como funciona o rendimento da Caixinha a 150% do CDI:**\n\n"
-                f"• **CDI Atual:** **{cdi_atual:.2f}% ao ano** (~{cdi_d*100:.4f}% ao dia útil)\n"
-                f"• **Sua Caixinha (150% do CDI):** **{taxa_150_anual:.2f}% ao ano** (~{rd_150*100:.4f}% ao dia útil)\n\n"
-                f"**Exemplo com R$ 5.000,00 investidos:**\n"
-                f"- **1 dia útil:** rende aprox. **+{fmt_moeda(ex_dia)}**\n"
-                f"- **1 mês (21 dias úteis):** rende aprox. **+{fmt_moeda(ex_mes)}** (Saldo vai para {fmt_moeda(ex_saldo + ex_mes)})\n"
-                f"- **1 ano (252 dias úteis):** rende aprox. **+{fmt_moeda(ex_ano)}** (Saldo vai para {fmt_moeda(ex_saldo + ex_ano)})\n\n"
-                f"💡 O cálculo é feito por dias úteis com capitalização composta diária."
+                f"📦 **Como funciona o rendimento das Caixinhas atreladas ao CDI:**\n\n"
+                f"• **CDI Oficial:** **{cdi_atual:.2f}% ao ano** (~{cdi_d*100:.4f}% ao dia útil)\n\n"
+                f"Você pode cadastrar suas caixinhas e definir manualmente a porcentagem do CDI contratada (ex: 100%, 110%, 120%, 150%, etc.). "
+                f"O cálculo é feito automaticamente por dias úteis com capitalização composta diária."
             )
         tot_c = sum(float(c.get("saldo", 0.0)) for c in caixinhas_ref)
         linhas_c = []
         for c in caixinhas_ref:
             s = float(c.get("saldo", 0.0))
-            pct = float(c.get("percentual_cdi", 150.0))
+            pct = float(c.get("percentual_cdi", 100.0))
             rd = cdi_d * (pct / 100.0)
             dia_bruto = s * rd
             mes_bruto = s * (((1 + rd) ** 21) - 1)
             ano_bruto = s * (((1 + rd) ** 252) - 1)
             taxa_anual_eq = cdi_atual * (pct / 100.0)
             linhas_c.append(
-                f"• **{c['nome']}** ({c.get('banco', 'Nubank')} · {pct:.0f}% do CDI):\n"
+                f"• **{c['nome']}** ({c.get('banco', 'Banco')} · {pct:.0f}% do CDI configurado):\n"
                 f"  - Saldo atual: **{fmt_moeda(s)}**\n"
-                f"  - Rentabilidade contratada: **{taxa_anual_eq:.2f}% ao ano** (~{rd*100:.4f}% por dia útil)\n"
+                f"  - Rentabilidade calculada: **{taxa_anual_eq:.2f}% ao ano** (~{rd*100:.4f}% por dia útil)\n"
                 f"  - Rende aprox. **+{fmt_moeda(dia_bruto)}** por dia útil\n"
                 f"  - Rende aprox. **+{fmt_moeda(mes_bruto)}** por mês (21 dias úteis)\n"
                 f"  - Projeção em 1 ano: **+{fmt_moeda(ano_bruto)}** (Saldo irá para {fmt_moeda(s + ano_bruto)})"
@@ -2584,7 +2650,7 @@ def gerar_resposta_ia_carteira(pergunta, db_ref, df_ativos_ref, caixinhas_ref, p
             f"📦 **Análise de Rendimento das suas Caixinhas (CDI Oficial: {cdi_atual:.2f}% a.a.):**\n\n"
             + "\n\n".join(linhas_c) +
             f"\n\n**Total guardado em Caixinhas:** **{fmt_moeda(tot_c)}**.\n"
-            f"*(Cálculo feito com capitalização composta diária por dias úteis, antes do IR regressivo)*."
+            f"*(Cálculo feito com base na porcentagem do CDI que você configurou manualmente para cada caixinha)*."
         )
 
     if any(w in p_lower for w in ["dividendos", "provento", "rendimento fii", "renda passiva"]):
@@ -2648,12 +2714,12 @@ def gerar_resposta_ia_carteira(pergunta, db_ref, df_ativos_ref, caixinhas_ref, p
     return (
         f"Olá, Ingrid! 👋 Analisando a sua carteira em tempo real:\n\n"
         f"• **Patrimônio Atual:** **{fmt_moeda(pat_total)}** ({fmt_moeda(pat_bolsa)} em Bolsa + {fmt_moeda(tot_caix)} em Caixinhas)\n"
-        f"• **CDI Atual:** {cdi_atual:.2f}% a.a. (Sua caixinha Nubank rende **{cdi_atual * 1.5:.2f}% a.a.** a 150% do CDI)\n"
+        f"• **CDI Atual:** {cdi_atual:.2f}% a.a. (O rendimento das caixinhas acompanha a porcentagem que você definir manualmente)\n"
         f"• **Total de Ativos:** {len(ativos_list)} ativos cadastrados\n\n"
         f"Você pode me perguntar sobre:\n"
         f"- *'Qual ativo deu mais lucro?'*\n"
         f"- *'Onde vale a pena aportar para baixar meu preço médio?'*\n"
-        f"- *'Quanto rende minha caixinha do Nubank?'*\n"
+        f"- *'Quanto rendem minhas caixinhas?'*\n"
         f"- *'Quanto vou receber de dividendos?'*\n"
         f"- *'Como está a divisão da minha carteira?'*"
     )
@@ -4051,12 +4117,82 @@ def pagina_carteira() -> None:
     """Tela: Minha Carteira."""
     hero("Minha Carteira", "Ações, FIIs, Cripto, Dólar e Caixinhas — com cotações em tempo real e Radar de Aportes da Bolsa.")
 
+    md("""
+    <style>
+    /* Pílulas 100% arredondadas e segmented controls para as abas de Minha Carteira */
+    [data-testid="stTabs"] {
+      margin-top: 0.8rem !important;
+    }
+    [data-testid="stTabs"] [data-baseweb="tab-list"],
+    div[data-baseweb="tab-list"],
+    div[role="tablist"] {
+      background: #EEF2F6 !important;
+      border: 1px solid #E2E8F0 !important;
+      border-radius: 9999px !important;
+      padding: 5px 6px !important;
+      gap: 5px !important;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+      margin-bottom: 2rem !important;
+      display: inline-flex !important;
+      width: auto !important;
+      max-width: 100% !important;
+      border-bottom: none !important;
+    }
+    [data-testid="stTabs"] [data-baseweb="tab-border"],
+    [data-testid="stTabs"] [data-baseweb="tab-highlight"],
+    div[data-baseweb="tab-border"],
+    div[data-baseweb="tab-highlight"] {
+      display: none !important;
+      height: 0 !important;
+      visibility: hidden !important;
+    }
+    [data-testid="stTabs"] button[data-baseweb="tab"],
+    [data-testid="stTabs"] button[role="tab"],
+    button[data-baseweb="tab"],
+    button[role="tab"] {
+      border-radius: 9999px !important;
+      border: none !important;
+      padding: 9px 20px !important;
+      background: transparent !important;
+      color: #64748B !important;
+      font-weight: 600 !important;
+      height: auto !important;
+      min-height: 38px !important;
+      outline: none !important;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    [data-testid="stTabs"] button[data-baseweb="tab"]:hover,
+    button[data-baseweb="tab"]:hover {
+      background: rgba(255, 255, 255, 0.75) !important;
+      color: #0F172A !important;
+      border-radius: 9999px !important;
+    }
+    [data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"],
+    [data-testid="stTabs"] button[role="tab"][aria-selected="true"],
+    [data-testid="stTabs"] [aria-selected="true"],
+    button[data-baseweb="tab"][aria-selected="true"],
+    button[role="tab"][aria-selected="true"] {
+      background: linear-gradient(135deg, #0F766E 0%, #115E59 100%) !important;
+      color: #FFFFFF !important;
+      font-weight: 800 !important;
+      border-radius: 9999px !important;
+      box-shadow: 0 4px 14px rgba(15, 118, 110, 0.35) !important;
+      border: none !important;
+    }
+    [data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] *,
+    [data-testid="stTabs"] [aria-selected="true"] * {
+      color: #FFFFFF !important;
+      font-weight: 800 !important;
+    }
+    </style>
+    """)
+
     aba_invest, aba_radar, aba_ia, aba_alt, aba_caixinhas, aba_vendas = st.tabs([
         "📈  Ações, FIIs e Renda Fixa",
         "🎯  Radar da Bolsa",
         "🤖  Conversar com a IA",
         "🪙  Cripto & Dólar",
-        "📦  Caixinhas & CDI",
+        "📦  Caixinhas",
         "📑  Histórico de Vendas"
     ])
 
@@ -4262,7 +4398,7 @@ def pagina_carteira() -> None:
                     "role": "assistant",
                     "content": (
                         "Olá, Ingrid! 👋 Sou sua consultora financeira de inteligência artificial.\n\n"
-                        "Tenho acesso completo e em tempo real a todos os seus ativos da bolsa, histórico de dividendos e às suas caixinhas do Nubank a 150% do CDI. "
+                        "Tenho acesso completo e em tempo real a todos os seus ativos da bolsa, histórico de dividendos e às suas caixinhas. "
                         "Como posso te ajudar hoje?"
                     )
                 }
@@ -4280,8 +4416,8 @@ def pagina_carteira() -> None:
             sugestao_escolhida = "Qual ativo está no prejuízo ou abaixo do preço médio?"
         if c_sug3.button("🎯 Onde vale a pena aportar hoje?", use_container_width=True, key="btn_sug_3"):
             sugestao_escolhida = "Onde vale a pena comprar hoje para baixar o preço médio?"
-        if c_sug4.button("📦 Quanto rende a Caixinha a 150%?", use_container_width=True, key="btn_sug_4"):
-            sugestao_escolhida = "Quanto rende minha Caixinha do Nubank a 150% do CDI?"
+        if c_sug4.button("📦 Quanto rendem minhas Caixinhas?", use_container_width=True, key="btn_sug_4"):
+            sugestao_escolhida = "Quanto estão rendendo as minhas caixinhas?"
         if c_sug5.button("💰 Quais os próximos dividendos?", use_container_width=True, key="btn_sug_5"):
             sugestao_escolhida = "Quanto vou receber de proventos e dividendos?"
         if c_sug6.button("📊 Como está dividida minha carteira?", use_container_width=True, key="btn_sug_6"):
@@ -4443,8 +4579,6 @@ def pagina_carteira() -> None:
         movs_todas = db.get("caixinhas_mov", [])
         cdi_anual_oficial = obter_taxa_cdi()
         cdi_diario_oficial = obter_cdi_diario(cdi_anual_oficial)
-        rend_turbo_anual = cdi_anual_oficial * 1.5
-        rend_turbo_diario = cdi_diario_oficial * 1.5
 
         md(f"""
         <div class="exec-hero-card status-positivo" style="margin-bottom:1.5rem">
@@ -4455,18 +4589,18 @@ def pagina_carteira() -> None:
             </div>
             <div class="ehc-big-num">{fmt_moeda(total_em_caixinhas)}</div>
             <div class="ehc-label">TOTAL GUARDADO EM CAIXINHAS</div>
-            <div class="ehc-sub">Rendimento automático atrelado ao CDI Oficial ({cdi_anual_oficial:.2f}% a.a.). Caixinha Turbo Nubank a 150% do CDI rende <b>{rend_turbo_anual:.2f}% a.a.</b></div>
+            <div class="ehc-sub">Rendimento automático atrelado ao CDI Oficial ({cdi_anual_oficial:.2f}% a.a.). A porcentagem do CDI é definida manualmente por você para cada caixinha.</div>
           </div>
           <div class="ehc-metrics">
             <div class="ehc-tile">
               <span class="ehc-tile-l">CDI Oficial Hoje</span>
               <span class="ehc-tile-v" style="color:#5EEAD4">{cdi_anual_oficial:.2f}%</span>
-              <span class="ehc-tile-s">~{cdi_diario_oficial*100:.4f}% ao dia útil</span>
+              <span class="ehc-tile-s">Taxa anual B3 / Bacen</span>
             </div>
             <div class="ehc-tile">
-              <span class="ehc-tile-l">Caixinha 150% CDI</span>
-              <span class="ehc-tile-v" style="color:#A7F3D0">{rend_turbo_anual:.2f}%</span>
-              <span class="ehc-tile-s">~{rend_turbo_diario*100:.4f}% ao dia útil</span>
+              <span class="ehc-tile-l">CDI Diário B3</span>
+              <span class="ehc-tile-v" style="color:#A7F3D0">~{cdi_diario_oficial*100:.4f}%</span>
+              <span class="ehc-tile-s">Taxa por dia útil</span>
             </div>
             <div class="ehc-tile">
               <span class="ehc-tile-l">Caixinhas Ativas</span>
@@ -4480,7 +4614,7 @@ def pagina_carteira() -> None:
         # Botão para calcular e sincronizar rendimento diário de todas as caixinhas
         c_sync1, c_sync2 = st.columns([3, 1], vertical_alignment="center")
         with c_sync1:
-            md("<div style='font-size:.88rem;color:#475569'><b>Atualização Automática do CDI:</b> Acumula o rendimento diário por dias úteis no saldo da sua Caixinha.</div>")
+            md("<div style='font-size:.88rem;color:#475569'><b>Atualização Automática do CDI:</b> Acumula o rendimento diário por dias úteis no saldo da sua Caixinha conforme o percentual que você definiu.</div>")
         with c_sync2:
             if st.button("⚡ Atualizar Rendimentos CDI", type="primary", use_container_width=True, help="Calcula e soma os rendimentos dos dias úteis decorridos"):
                 qtd_at, tot_rend_novo = atualizar_rendimentos_caixinhas_cdi(salvar=True)
@@ -4493,13 +4627,13 @@ def pagina_carteira() -> None:
         with st.expander("Criar nova caixinha"):
             with st.form("form_nova_caixinha", clear_on_submit=True):
                 cx1, cx2 = st.columns(2)
-                nome_cx = cx1.text_input("Nome da Caixinha", placeholder="Ex: Caixinha Turbo, Reserva de Emergência, Viagem").strip()
+                nome_cx = cx1.text_input("Nome da Caixinha", placeholder="Ex: Reserva de Emergência, Viagem, Metas").strip()
                 banco_cx = cx2.text_input("Banco ou onde está guardado", placeholder="Ex: Nubank, Banco Inter, C6 Bank", value="Nubank").strip()
 
                 cx3, cx4, cx5 = st.columns(3)
                 saldo_inicial_cx = cx3.number_input("Valor guardado inicialmente (R$)", min_value=0.01, value=500.0, step=50.0)
                 rendimento_cx = cx4.number_input("Rendimento inicial acumulado (R$)", min_value=0.0, value=0.0, step=10.0)
-                pct_cdi_in = cx5.number_input("% do CDI contratado", min_value=10.0, max_value=500.0, value=150.0, step=10.0, help="Nubank Turbo rende 150% do CDI (multiplicador 1,5). Caixinha comum rende 100% do CDI.")
+                pct_cdi_in = cx5.number_input("% do CDI contratado", min_value=1.0, max_value=500.0, value=100.0, step=5.0, help="Informe a porcentagem do CDI desta caixinha manualmente (ex: 100%, 110%, 120%, 150%).")
 
                 if st.form_submit_button("Criar caixinha", use_container_width=True, type="primary"):
                     if nome_cx:
@@ -4523,7 +4657,7 @@ def pagina_carteira() -> None:
         else:
             for cx in caixinhas_lista:
                 saldo_cx = float(cx.get("saldo", 0.0))
-                pct_cx = float(cx.get("percentual_cdi", 150.0))
+                pct_cx = float(cx.get("percentual_cdi", 100.0))
                 taxa_anual_cx = cdi_anual_oficial * (pct_cx / 100.0)
                 m_cx = [m for m in movs_todas if m["caixinha_id"] == cx["id"]]
                 tot_g = sum(float(m["valor"]) for m in m_cx if m["tipo"] == "entrada")
@@ -4633,11 +4767,11 @@ def pagina_carteira() -> None:
                                 st.rerun()
 
             # Simulador interativo de rendimento CDI futuro
-            with st.expander("🧮 Simulador de Rendimento da Caixinha (150% do CDI)"):
-                st.markdown(f"Simule quanto seu dinheiro rende a **{rend_turbo_anual:.2f}% ao ano** (150% do CDI oficial de {cdi_anual_oficial:.2f}% a.a.) calculando capitalização diária por dias úteis, com separação de IR e rendimento líquido.")
+            with st.expander("🧮 Simulador de Rendimento da Caixinha conforme o CDI"):
+                st.markdown(f"Simule quanto seu dinheiro rende calculando capitalização diária por dias úteis com base no CDI Oficial ({cdi_anual_oficial:.2f}% a.a.) e no percentual do CDI que você definir abaixo.")
                 sim_c1, sim_c2 = st.columns(2)
                 sim_valor = sim_c1.number_input("Valor a simular (R$)", min_value=10.0, value=5000.0, step=500.0, key="sim_val_cdi")
-                sim_pct = sim_c2.number_input("Percentual do CDI (%)", min_value=50.0, max_value=300.0, value=150.0, step=10.0, key="sim_pct_cdi")
+                sim_pct = sim_c2.number_input("Percentual do CDI (%)", min_value=1.0, max_value=500.0, value=100.0, step=5.0, key="sim_pct_cdi")
 
                 periodos_sim = [
                     ("1 Dia Útil", 1, 1),
