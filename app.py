@@ -310,7 +310,7 @@ def _store_cache():
 CACHE = _store_cache()
 BRAPI_TOKEN = os.environ.get("BRAPI_TOKEN", "")
 
-def _get_json(url, timeout=4):
+def _get_json(url, timeout=2.5):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
@@ -327,7 +327,13 @@ def _cached(chave, ttl, fn):
     if val is not None:
         CACHE[chave] = (agora, val)
         return val
-    return item[1] if item else None
+    # Se falhou mas temos valor prévio, reutiliza por mais 120s para evitar lentidão
+    if item and item[1] is not None:
+        CACHE[chave] = (agora, item[1])
+        return item[1]
+    # Negative caching de 60s para evitar chamadas de rede lentas em falhas consecutivas
+    CACHE[chave] = (agora, None)
+    return None
 
 def _tentar_fontes(fontes):
     """Tenta cada fonte em ordem; devolve a primeira que responder com preço válido."""
@@ -342,7 +348,7 @@ def _tentar_fontes(fontes):
 
 def _yahoo_quote(simbolo):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(simbolo)}?interval=1m&range=1d"
-    meta = _get_json(url, timeout=5)["chart"]["result"][0]["meta"]
+    meta = _get_json(url, timeout=2.5)["chart"]["result"][0]["meta"]
     preco = float(meta["regularMarketPrice"])
     prev = meta.get("chartPreviousClose") or meta.get("previousClose")
     pct = ((preco - float(prev)) / float(prev) * 100) if prev else None
@@ -350,12 +356,11 @@ def _yahoo_quote(simbolo):
 
 def _awesome_quote(par):
     chave = par.replace("-", "")
-    d = _get_json(f"https://economia.awesomeapi.com.br/last/{par}", timeout=5)[chave]
+    d = _get_json(f"https://economia.awesomeapi.com.br/last/{par}", timeout=2.5)[chave]
     return {"preco": float(d["bid"]), "pct": float(d.get("pctChange", 0.0))}
 
 def _binance_quote(simbolo):
-    # data-api.binance.vision funciona também em servidores nos EUA (Streamlit Cloud)
-    d = _get_json(f"https://data-api.binance.vision/api/v3/ticker/24hr?symbol={simbolo}", timeout=5)
+    d = _get_json(f"https://data-api.binance.vision/api/v3/ticker/24hr?symbol={simbolo}", timeout=2.5)
     return {"preco": float(d["lastPrice"]), "pct": float(d["priceChangePercent"])}
 
 def cotacao_dolar():
@@ -364,20 +369,20 @@ def cotacao_dolar():
             lambda: _awesome_quote("USD-BRL"),
             lambda: _yahoo_quote("BRL=X"),
             lambda: _binance_quote("USDTBRL"),
-            lambda: {"preco": float(_get_json("https://api.coinbase.com/v2/exchange-rates?currency=USD", timeout=5)["data"]["rates"]["BRL"]), "pct": None},
+            lambda: {"preco": float(_get_json("https://api.coinbase.com/v2/exchange-rates?currency=USD", timeout=2.5)["data"]["rates"]["BRL"]), "pct": None},
         ])
-    return _cached("USD-BRL", 20, f)
+    return _cached("USD-BRL", 300, f)
 
 def cotacao_cripto(simbolo):
     s = simbolo.strip().upper()
     def f():
         return _tentar_fontes([
             lambda: _awesome_quote(f"{s}-BRL"),
-            lambda: _yahoo_quote(f"{s}-BRL"),
             lambda: _binance_quote(f"{s}BRL"),
-            lambda: {"preco": float(_get_json(f"https://api.coinbase.com/v2/prices/{s}-BRL/spot", timeout=5)["data"]["amount"]), "pct": None},
+            lambda: _yahoo_quote(f"{s}-BRL"),
+            lambda: {"preco": float(_get_json(f"https://api.coinbase.com/v2/prices/{s}-BRL/spot", timeout=2.5)["data"]["amount"]), "pct": None},
         ])
-    return _cached(f"CRIPTO-{s}", 20, f)
+    return _cached(f"CRIPTO-{s}", 300, f)
 
 def _url_brapi(caminho):
     url = f"https://brapi.dev/api/{caminho}"
@@ -388,32 +393,36 @@ def _url_brapi(caminho):
 def cotacao_acao(ticker):
     t = ticker.strip().upper()
     def f():
-        data = _get_json(_url_brapi(f"quote/{urllib.parse.quote(t)}"))
-        if data.get("results"):
-            r = data["results"][0]
-            p = r.get("regularMarketPrice")
-            if p:
-                return {"preco": float(p), "pct": r.get("regularMarketChangePercent")}
+        # 1. Tenta Yahoo Finance direto (ultra-rápido para B3, ex: PETR4.SA)
+        try:
+            sym_y = t if t.startswith("^") else f"{t}.SA"
+            r = _yahoo_quote(sym_y)
+            if r and r.get("preco") and float(r["preco"]) > 0:
+                return r
+        except Exception:
+            pass
+        # 2. Fallback para Brapi (se token configurado ou disponível)
+        if BRAPI_TOKEN:
+            try:
+                data = _get_json(_url_brapi(f"quote/{urllib.parse.quote(t)}"), timeout=2.5)
+                if data.get("results"):
+                    res = data["results"][0]
+                    p = res.get("regularMarketPrice")
+                    if p:
+                        return {"preco": float(p), "pct": res.get("regularMarketChangePercent")}
+            except Exception:
+                pass
         return None
-    return _cached(f"B3-{t}", 45, f)
+    return _cached(f"B3-{t}", 300, f)
 
 def cotacao_ibov():
     def f():
         try:
-            data = _get_json("https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval=1d&range=1d", timeout=3)
-            meta = data["chart"]["result"][0]["meta"]
-            preco = meta["regularMarketPrice"]
-            prev = meta.get("chartPreviousClose") or meta.get("previousClose")
-            pct = ((preco - prev) / prev * 100) if prev else 0.0
-            return {"preco": float(preco), "pct": float(pct)}
-        except Exception:
-            pass
-        try:
-            return cotacao_acao("^BVSP")
+            return _yahoo_quote("^BVSP")
         except Exception:
             pass
         return None
-    return _cached("IBOV", 60, f)
+    return _cached("IBOV", 300, f)
 
 def buscar_proventos_mercado(ticker):
     try:
@@ -1658,20 +1667,97 @@ div[data-baseweb="popover"] > div {
 }
 
 .stTabs [data-baseweb="tab-list"] {
-  gap: 8px;
-  border-bottom: 2px solid var(--line);
+  background: #FFFFFF !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 14px !important;
+  padding: 6px 8px !important;
+  gap: 6px !important;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.04) !important;
+  margin-bottom: 1.6rem !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
 }
 .stTabs [data-baseweb="tab"] {
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 8px 8px 0 0;
-  font-weight: 600;
-  color: var(--ink-3);
-  font-size: .9rem;
+  height: 42px !important;
+  padding: 0 18px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  color: var(--ink-3) !important;
+  font-size: .88rem !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  transition: all .2s cubic-bezier(.16,1,.3,1) !important;
 }
-.stTabs [aria-selected="true"] { color: var(--brand) !important; font-weight: 700; }
-.stTabs [data-baseweb="tab-highlight"] { background-color: var(--brand) !important; height: 3px; border-radius: 3px; }
-.stTabs [data-baseweb="tab-border"] { display: none; }
+.stTabs [data-baseweb="tab"]:hover {
+  color: var(--brand) !important;
+  background: rgba(15,118,110,0.06) !important;
+}
+.stTabs [aria-selected="true"] {
+  background: var(--brand) !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  box-shadow: 0 3px 10px rgba(15,118,110,0.3) !important;
+}
+.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+.stTabs [data-baseweb="tab-border"] { display: none !important; }
+
+/* Chat IA - Fintech Executive Styling */
+[data-testid="stChatMessage"] {
+  border-radius: 14px !important;
+  padding: 1.1rem 1.4rem !important;
+  margin-bottom: 0.9rem !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.03) !important;
+  background: #FFFFFF !important;
+}
+[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
+  background: #F8FAFC !important;
+  border-left: 4px solid var(--brand) !important;
+}
+[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
+  background: #F0FDF4 !important;
+  border-left: 4px solid #10B981 !important;
+}
+[data-testid="stChatInput"] textarea {
+  border-radius: 14px !important;
+  border: 1.5px solid #CBD5E1 !important;
+  font-size: 0.92rem !important;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.04) !important;
+}
+[data-testid="stChatInput"] textarea:focus {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px rgba(15,118,110,0.15) !important;
+}
+
+/* Sugestões de Perguntas Rápidas */
+.st-key-btn_sug_1 button, .st-key-btn_sug_2 button, .st-key-btn_sug_3 button,
+.st-key-btn_sug_4 button, .st-key-btn_sug_5 button, .st-key-btn_sug_6 button {
+  background: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 999px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  padding: 0.45rem 1rem !important;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.03) !important;
+  transition: all 0.2s cubic-bezier(.16,1,.3,1) !important;
+}
+.st-key-btn_sug_1 button:hover, .st-key-btn_sug_2 button:hover, .st-key-btn_sug_3 button:hover,
+.st-key-btn_sug_4 button:hover, .st-key-btn_sug_5 button:hover, .st-key-btn_sug_6 button:hover {
+  border-color: var(--brand) !important;
+  color: var(--brand) !important;
+  background: #F0FDFA !important;
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 4px 12px rgba(15,118,110,0.18) !important;
+}
+
+/* Tabelas e Dataframes */
+[data-testid="stDataFrame"] {
+  border-radius: 12px !important;
+  border: 1px solid var(--line) !important;
+  overflow: hidden !important;
+  box-shadow: var(--sh-xs) !important;
+}
 
 [data-testid="stExpander"] {
   border: 1px solid var(--line) !important;
@@ -2879,7 +2965,10 @@ with st.container(key="nav_mobile"):
         on_change=_sincronizar_menu, args=("menu_nav_m",), label_visibility="collapsed"
     )
 
-if auto_tempo_real:
+# Atualiza cotações em segundo plano no máximo a cada 5 minutos (evita lentidão e travamentos)
+agora_ts = time.time()
+if auto_tempo_real and (agora_ts - st.session_state.get("_ult_att_tempo_real", 0) > 300):
+    st.session_state["_ult_att_tempo_real"] = agora_ts
     try:
         atualizar_precos(db)
     except Exception:
@@ -2962,12 +3051,9 @@ def render_barra_cotacoes():
 
 def _barra_ao_vivo():
     render_barra_cotacoes()
-    if auto_tempo_real:
-        if atualizar_precos(db) > 0:
-            st.rerun()
 
 if auto_tempo_real and hasattr(st, "fragment"):
-    st.fragment(run_every=30)(_barra_ao_vivo)()
+    st.fragment(run_every=60)(_barra_ao_vivo)()
 else:
     _barra_ao_vivo()
 
