@@ -24,7 +24,7 @@ import urllib.request
 import urllib.parse
 import calendar
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 try:
     from zoneinfo import ZoneInfo
@@ -168,8 +168,8 @@ LISTA_CARTOES = ["Nubank", "C6 Bank", "Banco Inter", "Itaú", "Bradesco", "Santa
 LISTA_CATEGORIAS_CARTAO = ["Lazer", "Empréstimo", "Curso", "Streaming / Assinatura", "Tecnologia", "Vestuário", "Viagem", "Mercado", "Alimentação", "Saúde", "Outros"]
 LISTA_CATEGORIAS_DEBITO = [
     "Salário", "Vale da Empresa", "Comissão", "Compra no Débito", "Pagamento de Empréstimo",
-    "Transferência PIX", "Alimentação / Restaurante", "Supermercado", "Contas de Casa (Luz, Água, Net)",
-    "Transporte / Combustível", "Lazer", "Saúde", "Educação", "Outros"
+    "Transferência PIX", "Dinheiro em Nota", "Alimentação / Restaurante", "Supermercado", "Contas de Casa (Luz, Água, Net)",
+    "Transporte / Combustível", "Lazer", "Saúde", "Educação", "Reembolso / Estorno", "Outros"
 ]
 LISTA_CATEGORIAS_CONTAS = [
     "Moradia (Aluguel, Condomínio)", "Contas de Casa (Luz, Água, Gás)", "Internet & Telefonia",
@@ -2196,6 +2196,13 @@ components.html("""
 # ==============================================================================
 # FUNÇÕES DE CÁLCULO FINANCEIRO
 # ==============================================================================
+def eh_reembolso_item(c):
+    """Identifica se um lançamento do cartão é reembolso/estorno a ser abatido da fatura."""
+    if not isinstance(c, dict):
+        return False
+    t = str(c.get("tipo", "")).strip().lower()
+    return "reembolso" in t or "estorno" in t or c.get("is_reembolso") is True
+
 def inicio_fatura_compra(c):
     try:
         dt_compra = datetime.strptime(str(c["data_compra"]), "%Y-%m-%d").date()
@@ -2223,13 +2230,347 @@ def calcular_fatura_cartao_mes(chave_mes):
         p_tot = max(int(c.get("parcelas_total", 1)), 1)
         v_parc = float(c.get("valor_parcela", float(c.get("valor_total", 0.0)) / p_tot))
         a_ini, m_ini = inicio_fatura_compra(c)
+        eh_reemb = eh_reembolso_item(c)
         for p_idx in range(1, p_tot + 1):
             m_calc = m_ini + (p_idx - 1)
             a_calc = a_ini + (m_calc - 1) // 12
             m_real = ((m_calc - 1) % 12) + 1
             if f"{a_calc:04d}-{m_real:02d}" == chave_mes:
-                total += v_parc
-    return total
+                if eh_reemb:
+                    total -= v_parc
+                else:
+                    total += v_parc
+    return max(0.0, total)
+
+# ==============================================================================
+# MOTOR DE CÁLCULO CDI E CAIXINHAS (150% DO CDI)
+# ==============================================================================
+FERIADOS_NACIONAIS_MES_DIA = {
+    (1, 1),   # Confraternização Universal
+    (4, 21),  # Tiradentes
+    (5, 1),   # Dia do Trabalhador
+    (9, 7),   # Independência do Brasil
+    (10, 12), # Nossa Senhora Aparecida
+    (11, 2),  # Finados
+    (11, 15), # Proclamação da República
+    (11, 20), # Dia da Consciência Negra
+    (12, 25), # Natal
+}
+
+TABELA_IOF = {
+    1: 0.96, 2: 0.93, 3: 0.90, 4: 0.86, 5: 0.83, 6: 0.80, 7: 0.76, 8: 0.73,
+    9: 0.70, 10: 0.66, 11: 0.63, 12: 0.60, 13: 0.56, 14: 0.53, 15: 0.50,
+    16: 0.46, 17: 0.43, 18: 0.40, 19: 0.36, 20: 0.33, 21: 0.30, 22: 0.26,
+    23: 0.23, 24: 0.20, 25: 0.16, 26: 0.13, 27: 0.10, 28: 0.06, 29: 0.03
+}
+
+def obter_taxa_cdi():
+    """Busca taxa anual do CDI (% a.a.) da BrasilAPI ou Banco Central, com fallback para 13.65%."""
+    def _fetch():
+        try:
+            req = urllib.request.Request("https://brasilapi.com.br/api/taxas/v1/cdi", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                d = json.loads(resp.read().decode())
+                if d and "valor" in d and float(d["valor"]) > 0:
+                    return float(d["valor"])
+        except Exception:
+            pass
+        try:
+            req = urllib.request.Request("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                arr = json.loads(resp.read().decode())
+                if arr and len(arr) > 0 and "valor" in arr[0] and float(arr[0]["valor"]) > 0:
+                    return float(arr[0]["valor"])
+        except Exception:
+            pass
+        return 13.65
+    val = _cached("CDI_ANUAL_TAXA", 3600, _fetch)
+    return float(val) if val else 13.65
+
+def obter_cdi_diario(taxa_cdi_anual=None):
+    """Calcula a taxa diária do CDI a partir da taxa anual (base B3 de 252 dias úteis).
+    Fórmula: (1 + CDI_anual/100)^(1/252) - 1. Exemplo: 13,65% a.a. -> 0,050788% ao dia."""
+    if taxa_cdi_anual is None:
+        taxa_cdi_anual = obter_taxa_cdi()
+    return ((1.0 + (taxa_cdi_anual / 100.0)) ** (1.0 / 252.0)) - 1.0
+
+def contar_dias_uteis(data_ini, data_fim):
+    """Conta dias úteis (segunda a sexta, excluindo feriados nacionais) entre data_ini e data_fim."""
+    if isinstance(data_ini, str):
+        try:
+            data_ini = datetime.strptime(data_ini, "%Y-%m-%d").date()
+        except Exception:
+            return 0
+    if isinstance(data_fim, str):
+        try:
+            data_fim = datetime.strptime(data_fim, "%Y-%m-%d").date()
+        except Exception:
+            return 0
+    if data_fim <= data_ini:
+        return 0
+    cur = data_ini + timedelta(days=1)
+    dias = 0
+    while cur <= data_fim:
+        if cur.weekday() < 5 and (cur.month, cur.day) not in FERIADOS_NACIONAIS_MES_DIA:
+            dias += 1
+        cur += timedelta(days=1)
+    return dias
+
+def calcular_impostos_renda_fixa(rendimento_bruto, dias_corridos):
+    """Calcula IOF e Imposto de Renda (tabela regressiva) sobre o rendimento."""
+    if rendimento_bruto <= 0:
+        return {"iof": 0.0, "aliquota_iof": 0.0, "ir": 0.0, "aliquota_ir": 0.0, "liquido": 0.0}
+    aliq_iof = TABELA_IOF.get(dias_corridos, 0.0) if dias_corridos < 30 else 0.0
+    val_iof = rendimento_bruto * aliq_iof
+    base_ir = max(0.0, rendimento_bruto - val_iof)
+    if dias_corridos <= 180:
+        aliq_ir = 0.225
+    elif dias_corridos <= 360:
+        aliq_ir = 0.200
+    elif dias_corridos <= 720:
+        aliq_ir = 0.175
+    else:
+        aliq_ir = 0.150
+    val_ir = base_ir * aliq_ir
+    val_liquido = max(0.0, rendimento_bruto - val_iof - val_ir)
+    return {
+        "iof": val_iof,
+        "aliquota_iof": aliq_iof * 100.0,
+        "ir": val_ir,
+        "aliquota_ir": aliq_ir * 100.0,
+        "liquido": val_liquido
+    }
+
+def calcular_rendimento_caixinha(saldo_inicial, percentual_cdi=150.0, dias_uteis=0, dias_corridos=0, taxa_cdi_anual=None):
+    """Calcula o rendimento composto de uma caixinha com capitalização por dias úteis.
+    Fórmula: Rendimento = Saldo * ((1 + CDI_diario * (pct_cdi/100))^dias_uteis - 1)"""
+    if taxa_cdi_anual is None:
+        taxa_cdi_anual = obter_taxa_cdi()
+    cdi_d = obter_cdi_diario(taxa_cdi_anual)
+    r_diario = cdi_d * (percentual_cdi / 100.0)
+    fator = (1.0 + r_diario) ** max(0, dias_uteis)
+    saldo_final_bruto = saldo_inicial * fator
+    rendimento_bruto = max(0.0, saldo_final_bruto - saldo_inicial)
+    impostos = calcular_impostos_renda_fixa(rendimento_bruto, dias_corridos)
+    return {
+        "saldo_inicial": saldo_inicial,
+        "saldo_final_bruto": saldo_final_bruto,
+        "rendimento_bruto": rendimento_bruto,
+        "iof": impostos["iof"],
+        "aliquota_iof": impostos["aliquota_iof"],
+        "ir": impostos["ir"],
+        "aliquota_ir": impostos["aliquota_ir"],
+        "rendimento_liquido": impostos["liquido"],
+        "saldo_liquido": saldo_inicial + impostos["liquido"],
+        "taxa_anual_bruta": taxa_cdi_anual * (percentual_cdi / 100.0),
+        "taxa_diaria_efetiva": r_diario * 100.0
+    }
+
+def atualizar_rendimentos_caixinhas_cdi(salvar=True):
+    """Atualiza automaticamente o saldo e rendimento de cada caixinha indexada ao CDI."""
+    hoje = hoje_br()
+    taxa_cdi = obter_taxa_cdi()
+    caixinhas = db.get("caixinhas", [])
+    total_novo_rendimento = 0.0
+    atualizadas = 0
+
+    for cx in caixinhas:
+        pct_cdi = float(cx.get("percentual_cdi", 150.0))
+        dt_base_str = cx.get("data_ultimo_rendimento") or cx.get("data_criacao") or hoje.strftime("%Y-%m-%d")
+        try:
+            dt_base = datetime.strptime(dt_base_str, "%Y-%m-%d").date()
+        except Exception:
+            dt_base = hoje
+
+        d_uteis = contar_dias_uteis(dt_base, hoje)
+        if d_uteis > 0:
+            saldo_atual = float(cx.get("saldo", 0.0))
+            if saldo_atual > 0:
+                d_corridos = (hoje - dt_base).days
+                res = calcular_rendimento_caixinha(saldo_atual, pct_cdi, d_uteis, d_corridos, taxa_cdi)
+                rend_ganho = res["rendimento_bruto"]
+                if rend_ganho > 0.005:
+                    cx["saldo"] = saldo_atual + rend_ganho
+                    cx["rendimento"] = float(cx.get("rendimento", 0.0)) + rend_ganho
+                    cx["data_ultimo_rendimento"] = hoje.strftime("%Y-%m-%d")
+                    registrar_mov_caixinha(
+                        cx["id"], "rendimento", rend_ganho, hoje.strftime("%Y-%m-%d"),
+                        f"Rendimento automático ({d_uteis} dias úteis a {pct_cdi:.0f}% do CDI)"
+                    )
+                    total_novo_rendimento += rend_ganho
+                    atualizadas += 1
+            else:
+                cx["data_ultimo_rendimento"] = hoje.strftime("%Y-%m-%d")
+
+    if salvar and atualizadas > 0:
+        salvar_dados(db)
+    return atualizadas, total_novo_rendimento
+
+def gerar_resposta_ia_carteira(pergunta, db_ref, df_ativos_ref, caixinhas_ref, pat_total, tot_caix, pat_bolsa):
+    """Assistente financeiro conversacional inteligente com acesso em tempo real aos dados da carteira."""
+    p_lower = pergunta.strip().lower()
+
+    ativos_list = []
+    if not df_ativos_ref.empty:
+        for _, r in df_ativos_ref.iterrows():
+            ativos_list.append({
+                "ticker": r["ticker"],
+                "nome": r.get("nome", r["ticker"]),
+                "classe": r.get("classe", "Outros"),
+                "qtd": float(r.get("qtd", 0)),
+                "pm": float(r.get("pm", 0)),
+                "preco_atual": float(r.get("preco_atual", 0)),
+                "investido": float(r.get("valor_investido", 0)),
+                "atual": float(r.get("valor_atual", 0)),
+                "lucro": float(r.get("lucro_reais", 0)),
+                "rentabilidade": float(r.get("rentabilidade_pct", 0))
+            })
+
+    cdi_atual = obter_taxa_cdi()
+    cdi_d = obter_cdi_diario(cdi_atual)
+
+    if any(w in p_lower for w in ["maior lucro", "mais lucrativo", "rendendo mais", "melhor ativo", "top ativo", "quem mais subiu"]):
+        if not ativos_list:
+            return "Você ainda não possui ativos da bolsa cadastrados na carteira."
+        mais_lucrativo = max(ativos_list, key=lambda x: x["lucro"])
+        mais_rentavel = max(ativos_list, key=lambda x: x["rentabilidade"])
+        return (
+            f"🏆 **Ativos de Maior Destaque na sua Carteira:**\n\n"
+            f"• **Maior Lucro em Reais:** **{mais_lucrativo['ticker']}** ({mais_lucrativo['nome']})\n"
+            f"  - Lucro líquido acumulado: **+{fmt_moeda(mais_lucrativo['lucro'])}** (+{mais_lucrativo['rentabilidade']:.2f}%)\n"
+            f"  - Preço pago (PM): {fmt_moeda(mais_lucrativo['pm'])} | Cotação atual: {fmt_moeda(mais_lucrativo['preco_atual'])}\n"
+            f"  - Posição atual: {mais_lucrativo['qtd']:.0f} cotas ({fmt_moeda(mais_lucrativo['atual'])})\n\n"
+            f"• **Maior Rentabilidade Percentual:** **{mais_rentavel['ticker']}** com valorização de **+{mais_rentavel['rentabilidade']:.2f}%**!"
+        )
+
+    if any(w in p_lower for w in ["prejuízo", "prejuizo", "menor lucro", "caindo", "pior ativo", "quem mais caiu"]):
+        if not ativos_list:
+            return "Nenhum ativo cadastrado para verificar prejuízos."
+        em_prejuizo = [a for a in ativos_list if a["lucro"] < 0]
+        if not em_prejuizo:
+            return "🎉 Parabéns! **Nenhum ativo da sua carteira está no prejuízo hoje.** Todos estão no zero a zero ou com lucro acumulado!"
+        pior = min(em_prejuizo, key=lambda x: x["lucro"])
+        detalhes = "\n".join([f"• **{a['ticker']}**: Prejuízo de {fmt_moeda(a['lucro'])} ({a['rentabilidade']:.2f}% | Cotação: {fmt_moeda(a['preco_atual'])})" for a in em_prejuizo])
+        return (
+            f"📉 **Ativos em Prejuízo / Abaixo do Preço Médio:**\n\n"
+            f"O ativo com maior variação negativa é **{pior['ticker']}** com {fmt_moeda(pior['lucro'])} ({pior['rentabilidade']:.2f}%).\n\n"
+            f"**Lista de ativos abaixo do seu Preço Médio:**\n{detalhes}\n\n"
+            f"💡 *Dica:* Quando um ativo sólido cai abaixo do seu Preço Médio, pode ser uma boa oportunidade para aportar e **reduzir seu PM** se você confia nos fundamentos da empresa/fundo."
+        )
+
+    if any(w in p_lower for w in ["caixinha", "cdi", "150%", "nubank", "rende", "rendimento da caixinha"]):
+        rd_150 = cdi_d * 1.5
+        taxa_150_anual = cdi_atual * 1.5
+        if not caixinhas_ref:
+            ex_saldo = 5000.0
+            ex_dia = ex_saldo * rd_150
+            ex_mes = ex_saldo * (((1.0 + rd_150) ** 21) - 1.0)
+            ex_ano = ex_saldo * (((1.0 + rd_150) ** 252) - 1.0)
+            return (
+                f"📦 **Como funciona o rendimento da Caixinha a 150% do CDI:**\n\n"
+                f"• **CDI Atual:** **{cdi_atual:.2f}% ao ano** (~{cdi_d*100:.4f}% ao dia útil)\n"
+                f"• **Sua Caixinha (150% do CDI):** **{taxa_150_anual:.2f}% ao ano** (~{rd_150*100:.4f}% ao dia útil)\n\n"
+                f"**Exemplo com R$ 5.000,00 investidos:**\n"
+                f"- **1 dia útil:** rende aprox. **+{fmt_moeda(ex_dia)}**\n"
+                f"- **1 mês (21 dias úteis):** rende aprox. **+{fmt_moeda(ex_mes)}** (Saldo vai para {fmt_moeda(ex_saldo + ex_mes)})\n"
+                f"- **1 ano (252 dias úteis):** rende aprox. **+{fmt_moeda(ex_ano)}** (Saldo vai para {fmt_moeda(ex_saldo + ex_ano)})\n\n"
+                f"💡 O cálculo é feito por dias úteis com capitalização composta diária."
+            )
+        tot_c = sum(float(c.get("saldo", 0.0)) for c in caixinhas_ref)
+        linhas_c = []
+        for c in caixinhas_ref:
+            s = float(c.get("saldo", 0.0))
+            pct = float(c.get("percentual_cdi", 150.0))
+            rd = cdi_d * (pct / 100.0)
+            dia_bruto = s * rd
+            mes_bruto = s * (((1 + rd) ** 21) - 1)
+            ano_bruto = s * (((1 + rd) ** 252) - 1)
+            taxa_anual_eq = cdi_atual * (pct / 100.0)
+            linhas_c.append(
+                f"• **{c['nome']}** ({c.get('banco', 'Nubank')} · {pct:.0f}% do CDI):\n"
+                f"  - Saldo atual: **{fmt_moeda(s)}**\n"
+                f"  - Rentabilidade contratada: **{taxa_anual_eq:.2f}% ao ano** (~{rd*100:.4f}% por dia útil)\n"
+                f"  - Rende aprox. **+{fmt_moeda(dia_bruto)}** por dia útil\n"
+                f"  - Rende aprox. **+{fmt_moeda(mes_bruto)}** por mês (21 dias úteis)\n"
+                f"  - Projeção em 1 ano: **+{fmt_moeda(ano_bruto)}** (Saldo irá para {fmt_moeda(s + ano_bruto)})"
+            )
+        return (
+            f"📦 **Análise de Rendimento das suas Caixinhas (CDI Oficial: {cdi_atual:.2f}% a.a.):**\n\n"
+            + "\n\n".join(linhas_c) +
+            f"\n\n**Total guardado em Caixinhas:** **{fmt_moeda(tot_c)}**.\n"
+            f"*(Cálculo feito com capitalização composta diária por dias úteis, antes do IR regressivo)*."
+        )
+
+    if any(w in p_lower for w in ["dividendos", "provento", "rendimento fii", "renda passiva"]):
+        proventos = db_ref.get("proventos", [])
+        if not proventos:
+            return "Você ainda não tem proventos cadastrados na sua agenda de dividendos."
+        tot_prov = sum(float(p.get("valor", 0.0)) for p in proventos)
+        previstos = [p for p in proventos if p.get("status") == "previsto"]
+        recebidos = [p for p in proventos if p.get("status") == "recebido"]
+        det = "\n".join([f"• **{p['ticker']}**: {fmt_moeda(p['valor'])} ({p.get('tipo', 'Rendimento')} em {p.get('data')})" for p in proventos[:5]])
+        return (
+            f"💰 **Agenda de Proventos e Dividendos:**\n\n"
+            f"• **Total de proventos registrados:** **{fmt_moeda(tot_prov)}**\n"
+            f"• **Já recebidos:** {fmt_moeda(sum(float(p['valor']) for p in recebidos))} ({len(recebidos)} lançamentos)\n"
+            f"• **Previstos a receber:** {fmt_moeda(sum(float(p['valor']) for p in previstos))} ({len(previstos)} lançamentos)\n\n"
+            f"**Últimos lançamentos:**\n{det}"
+        )
+
+    if any(w in p_lower for w in ["comprar", "aportar", "radar", "preço médio", "preco medio", "oportunidade"]):
+        if df_ativos_ref.empty:
+            return "Cadastre ativos na carteira para receber sugestões de aportes."
+        descontados = [a for a in ativos_list if a["rentabilidade"] < 0]
+        if descontados:
+            descontados = sorted(descontados, key=lambda x: x["rentabilidade"])
+            d_txt = "\n".join([f"• **{a['ticker']}**: Está **{abs(a['rentabilidade']):.1f}% mais barato** que seu PM ({fmt_moeda(a['preco_atual'])} vs PM {fmt_moeda(a['pm'])})" for a in descontados])
+            return (
+                f"🎯 **Oportunidades no Radar para Baixar o Preço Médio:**\n\n"
+                f"Estes ativos estão cotados abaixo do que você pagou anteriormente:\n\n{d_txt}\n\n"
+                f"💡 Comprando cotas desses ativos agora, seu **Preço Médio diminuirá**, aumentando seu potencial de ganho e retorno sobre dividendos futuros."
+            )
+        else:
+            fiis = [a for a in ativos_list if a["classe"] == "FIIs"]
+            if fiis:
+                return (
+                    f"🎯 **Recomendação de Aporte:**\n\n"
+                    f"Todos os seus ativos estão valorizados hoje! Para aportes regulares mantendo fluxo de caixa mensal, seus **FIIs** ({', '.join(f['ticker'] for f in fiis)}) são ótimas opções para gerar renda passiva constante todo mês."
+                )
+            return "Seus ativos estão valorizados. Continue fazendo aportes mensais consistentes de acordo com a sua meta!"
+
+    if any(w in p_lower for w in ["resumo", "divisao", "divisão", "alocação", "carteira", "patrimonio", "patrimônio", "quanto eu tenho"]):
+        resumo_classes = {}
+        for a in ativos_list:
+            cl = a["classe"]
+            resumo_classes[cl] = resumo_classes.get(cl, 0.0) + a["atual"]
+        resumo_classes["Caixinhas"] = tot_caix
+        partes = []
+        for cl, val in sorted(resumo_classes.items(), key=lambda kv: kv[1], reverse=True):
+            pct = (val / pat_total * 100) if pat_total > 0 else 0
+            partes.append(f"• **{cl}**: {fmt_moeda(val)} ({pct:.1f}%)")
+
+        lucro_tot = sum(a["lucro"] for a in ativos_list)
+        return (
+            f"📊 **Raio-X Completo do seu Patrimônio:**\n\n"
+            f"• **Patrimônio Total:** **{fmt_moeda(pat_total)}**\n"
+            f"• **Investido na Bolsa (Ações/FIIs/Cripto/Dólar):** {fmt_moeda(pat_bolsa)}\n"
+            f"• **Guardado em Caixinhas:** {fmt_moeda(tot_caix)}\n"
+            f"• **Lucro Total Acumulado na Bolsa:** {fmt_moeda(lucro_tot)}\n\n"
+            f"**Distribuição por Classe:**\n" + "\n".join(partes)
+        )
+
+    return (
+        f"Olá, Ingrid! 👋 Analisando a sua carteira em tempo real:\n\n"
+        f"• **Patrimônio Atual:** **{fmt_moeda(pat_total)}** ({fmt_moeda(pat_bolsa)} em Bolsa + {fmt_moeda(tot_caix)} em Caixinhas)\n"
+        f"• **CDI Atual:** {cdi_atual:.2f}% a.a. (Sua caixinha Nubank rende **{cdi_atual * 1.5:.2f}% a.a.** a 150% do CDI)\n"
+        f"• **Total de Ativos:** {len(ativos_list)} ativos cadastrados\n\n"
+        f"Você pode me perguntar sobre:\n"
+        f"- *'Qual ativo deu mais lucro?'*\n"
+        f"- *'Onde vale a pena aportar para baixar meu preço médio?'*\n"
+        f"- *'Quanto rende minha caixinha do Nubank?'*\n"
+        f"- *'Quanto vou receber de dividendos?'*\n"
+        f"- *'Como está a divisão da minha carteira?'*"
+    )
 
 def recebido_devedores_no_mes(chave_mes):
     return sum(r["valor"] for r in recebimentos_devedores_mes(chave_mes))
@@ -2803,12 +3144,14 @@ def despesas_por_categoria(chave):
         p_tot = max(int(c.get("parcelas_total", 1)), 1)
         v_parc = float(c.get("valor_parcela", float(c.get("valor_total", 0.0)) / p_tot))
         a_ini, m_ini = inicio_fatura_compra(c)
+        eh_reemb = eh_reembolso_item(c)
         for p_idx in range(1, p_tot + 1):
             m_calc = m_ini + (p_idx - 1)
             a_calc = a_ini + (m_calc - 1) // 12
             m_real = ((m_calc - 1) % 12) + 1
             if f"{a_calc:04d}-{m_real:02d}" == chave:
-                linhas.append(("Cartão", c.get("categoria", "Outros"), v_parc))
+                v_final = -v_parc if eh_reemb else v_parc
+                linhas.append(("Cartão", c.get("categoria", "Outros"), v_final))
     for c in db.get("contas_fixas", []):
         if c["mes_ano"] == chave:
             linhas.append(("Contas fixas", c.get("categoria", "Outros"), float(c["valor"])))
@@ -3124,17 +3467,21 @@ def pagina_visao_geral() -> None:
                     p_tot = max(int(c.get("parcelas_total", 1)), 1)
                     v_parc = float(c.get("valor_parcela", float(c["valor_total"]) / p_tot))
                     a_ini, m_ini = inicio_fatura_compra(c)
+                    eh_reemb = eh_reembolso_item(c)
                     for p_idx in range(1, p_tot + 1):
                         m_calc = m_ini + (p_idx - 1)
                         a_calc = a_ini + (m_calc - 1) // 12
                         m_real = ((m_calc - 1) % 12) + 1
                         if f"{a_calc:04d}-{m_real:02d}" == chave_mes_vg:
-                            faturas_mes_itens.append((c['descricao'], p_idx, p_tot, v_parc))
+                            faturas_mes_itens.append((c['descricao'], p_idx, p_tot, v_parc, eh_reemb))
                 if not faturas_mes_itens:
-                    st.caption("Nenhuma compra parcelada nesta fatura.")
+                    st.caption("Nenhum lançamento nesta fatura.")
                 else:
-                    for nom_c, p_i, p_t, v_p in faturas_mes_itens:
-                        st.write(f"• **{nom_c}** ({p_i}/{p_t}x): {fmt_moeda(v_p)}")
+                    for nom_c, p_i, p_t, v_p, eh_r in faturas_mes_itens:
+                        if eh_r:
+                            st.write(f"• ↩️ **{nom_c}** (Reembolso abatido): -{fmt_moeda(v_p)}")
+                        else:
+                            st.write(f"• **{nom_c}** ({p_i}/{p_t}x): {fmt_moeda(v_p)}")
 
     with col_c4:
         with st.container(border=True):
@@ -3618,11 +3965,12 @@ def pagina_carteira() -> None:
     """Tela: Minha Carteira."""
     hero("Minha Carteira", "Ações, FIIs, Cripto, Dólar e Caixinhas — com cotações em tempo real e Radar de Aportes da Bolsa.")
 
-    aba_invest, aba_radar, aba_alt, aba_caixinhas, aba_vendas = st.tabs([
+    aba_invest, aba_radar, aba_ia, aba_alt, aba_caixinhas, aba_vendas = st.tabs([
         "📈  Ações, FIIs e Renda Fixa",
         "🎯  Radar da Bolsa",
+        "🤖  Conversar com a IA",
         "🪙  Cripto & Dólar",
-        "📦  Caixinhas",
+        "📦  Caixinhas & CDI",
         "📑  Histórico de Vendas"
     ])
 
@@ -3819,6 +4167,66 @@ def pagina_carteira() -> None:
         with aba_m4:
             _render_lista_radar(criptos_mercado)
 
+    with aba_ia:
+        hero("Assistente IA da Carteira", "Faça perguntas sobre sua carteira: ativos mais lucrativos, onde vale a pena aportar, dividendos e rendimento das caixinhas.")
+
+        if "chat_ia_carteira" not in st.session_state:
+            st.session_state["chat_ia_carteira"] = [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Olá, Ingrid! 👋 Sou sua consultora financeira de inteligência artificial.\n\n"
+                        "Tenho acesso completo e em tempo real a todos os seus ativos da bolsa, histórico de dividendos e às suas caixinhas do Nubank a 150% do CDI. "
+                        "Como posso te ajudar hoje?"
+                    )
+                }
+            ]
+
+        # Sugestões de perguntas rápidas
+        md("<div style='font-size:.85rem;font-weight:700;color:#334155;margin-bottom:8px'>💡 Perguntas rápidas sobre a sua carteira:</div>")
+        c_sug1, c_sug2, c_sug3 = st.columns(3)
+        c_sug4, c_sug5, c_sug6 = st.columns(3)
+
+        sugestao_escolhida = None
+        if c_sug1.button("🏆 Qual ativo deu maior lucro?", use_container_width=True, key="btn_sug_1"):
+            sugestao_escolhida = "Qual ativo está rendendo mais e deu maior lucro?"
+        if c_sug2.button("📉 Algum ativo no prejuízo?", use_container_width=True, key="btn_sug_2"):
+            sugestao_escolhida = "Qual ativo está no prejuízo ou abaixo do preço médio?"
+        if c_sug3.button("🎯 Onde vale a pena aportar hoje?", use_container_width=True, key="btn_sug_3"):
+            sugestao_escolhida = "Onde vale a pena comprar hoje para baixar o preço médio?"
+        if c_sug4.button("📦 Quanto rende a Caixinha a 150%?", use_container_width=True, key="btn_sug_4"):
+            sugestao_escolhida = "Quanto rende minha Caixinha do Nubank a 150% do CDI?"
+        if c_sug5.button("💰 Quais os próximos dividendos?", use_container_width=True, key="btn_sug_5"):
+            sugestao_escolhida = "Quanto vou receber de proventos e dividendos?"
+        if c_sug6.button("📊 Como está dividida minha carteira?", use_container_width=True, key="btn_sug_6"):
+            sugestao_escolhida = "Como está dividida minha carteira e meu patrimônio?"
+
+        # Área de histórico do chat
+        with st.container(border=True):
+            for msg in st.session_state["chat_ia_carteira"]:
+                with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
+                    st.markdown(msg["content"])
+
+        # Input do chat
+        prompt_chat = st.chat_input("Digite sua pergunta sobre sua carteira ou finanças...")
+
+        # Processa pergunta
+        pergunta_final = sugestao_escolhida or prompt_chat
+        if pergunta_final:
+            st.session_state["chat_ia_carteira"].append({"role": "user", "content": pergunta_final})
+            resposta = gerar_resposta_ia_carteira(
+                pergunta_final, db, df_ativos, caixinhas_lista,
+                patrimonio_total, total_em_caixinhas, patrimonio_investido_bolsa
+            )
+            st.session_state["chat_ia_carteira"].append({"role": "assistant", "content": resposta})
+            st.rerun()
+
+        c_limpar, _ = st.columns([1.8, 4.2])
+        with c_limpar:
+            if st.button("🗑️ Limpar histórico da conversa", use_container_width=True, key="btn_limpar_ia"):
+                st.session_state["chat_ia_carteira"] = []
+                st.rerun()
+
     with aba_alt:
         df_alt = df_ativos[df_ativos["classe"].isin(CLASSES_ALT)]
 
@@ -3947,6 +4355,10 @@ def pagina_carteira() -> None:
     with aba_caixinhas:
         hoje = hoje_br()
         movs_todas = db.get("caixinhas_mov", [])
+        cdi_anual_oficial = obter_taxa_cdi()
+        cdi_diario_oficial = obter_cdi_diario(cdi_anual_oficial)
+        rend_turbo_anual = cdi_anual_oficial * 1.5
+        rend_turbo_diario = cdi_diario_oficial * 1.5
 
         md(f"""
         <div class="exec-hero-card status-positivo" style="margin-bottom:1.5rem">
@@ -3957,27 +4369,51 @@ def pagina_carteira() -> None:
             </div>
             <div class="ehc-big-num">{fmt_moeda(total_em_caixinhas)}</div>
             <div class="ehc-label">TOTAL GUARDADO EM CAIXINHAS</div>
-            <div class="ehc-sub">Dinheiro seguro e protegido para seus objetivos, reservas e planos pessoais.</div>
+            <div class="ehc-sub">Rendimento automático atrelado ao CDI Oficial ({cdi_anual_oficial:.2f}% a.a.). Caixinha Turbo Nubank a 150% do CDI rende <b>{rend_turbo_anual:.2f}% a.a.</b></div>
           </div>
           <div class="ehc-metrics">
             <div class="ehc-tile">
+              <span class="ehc-tile-l">CDI Oficial Hoje</span>
+              <span class="ehc-tile-v" style="color:#5EEAD4">{cdi_anual_oficial:.2f}%</span>
+              <span class="ehc-tile-s">~{cdi_diario_oficial*100:.4f}% ao dia útil</span>
+            </div>
+            <div class="ehc-tile">
+              <span class="ehc-tile-l">Caixinha 150% CDI</span>
+              <span class="ehc-tile-v" style="color:#A7F3D0">{rend_turbo_anual:.2f}%</span>
+              <span class="ehc-tile-s">~{rend_turbo_diario*100:.4f}% ao dia útil</span>
+            </div>
+            <div class="ehc-tile">
               <span class="ehc-tile-l">Caixinhas Ativas</span>
-              <span class="ehc-tile-v" style="color:#5EEAD4">{len(caixinhas_lista)}</span>
+              <span class="ehc-tile-v" style="color:#CBD5E1">{len(caixinhas_lista)}</span>
               <span class="ehc-tile-s">Metas em andamento</span>
             </div>
           </div>
         </div>
         """)
 
+        # Botão para calcular e sincronizar rendimento diário de todas as caixinhas
+        c_sync1, c_sync2 = st.columns([3, 1], vertical_alignment="center")
+        with c_sync1:
+            md("<div style='font-size:.88rem;color:#475569'><b>Atualização Automática do CDI:</b> Acumula o rendimento diário por dias úteis no saldo da sua Caixinha.</div>")
+        with c_sync2:
+            if st.button("⚡ Atualizar Rendimentos CDI", type="primary", use_container_width=True, help="Calcula e soma os rendimentos dos dias úteis decorridos"):
+                qtd_at, tot_rend_novo = atualizar_rendimentos_caixinhas_cdi(salvar=True)
+                if qtd_at > 0:
+                    st.toast(f"{qtd_at} caixinha(s) atualizada(s)! +{fmt_moeda(tot_rend_novo)} de rendimento CDI somados ao saldo.", icon="📈")
+                else:
+                    st.toast("Suas Caixinhas já estão com os rendimentos do CDI atualizados até a data de hoje!", icon="✅")
+                st.rerun()
+
         with st.expander("Criar nova caixinha"):
             with st.form("form_nova_caixinha", clear_on_submit=True):
                 cx1, cx2 = st.columns(2)
-                nome_cx = cx1.text_input("Nome da Caixinha", placeholder="Ex: Fluxo do Mês, Reserva de Emergência, Viagem").strip()
-                banco_cx = cx2.text_input("Banco ou onde está guardado", placeholder="Ex: Nubank, Banco Inter, C6 Bank").strip()
+                nome_cx = cx1.text_input("Nome da Caixinha", placeholder="Ex: Caixinha Turbo, Reserva de Emergência, Viagem").strip()
+                banco_cx = cx2.text_input("Banco ou onde está guardado", placeholder="Ex: Nubank, Banco Inter, C6 Bank", value="Nubank").strip()
 
-                cx3, cx4 = st.columns(2)
-                saldo_inicial_cx = cx3.number_input("Valor que guardou inicialmente (R$)", min_value=0.01, value=500.0, step=50.0)
-                rendimento_cx = cx4.number_input("Rendimento acumulado até hoje (R$)", min_value=0.0, value=0.0, step=10.0)
+                cx3, cx4, cx5 = st.columns(3)
+                saldo_inicial_cx = cx3.number_input("Valor guardado inicialmente (R$)", min_value=0.01, value=500.0, step=50.0)
+                rendimento_cx = cx4.number_input("Rendimento inicial acumulado (R$)", min_value=0.0, value=0.0, step=10.0)
+                pct_cdi_in = cx5.number_input("% do CDI contratado", min_value=10.0, max_value=500.0, value=150.0, step=10.0, help="Nubank Turbo rende 150% do CDI (multiplicador 1,5). Caixinha comum rende 100% do CDI.")
 
                 if st.form_submit_button("Criar caixinha", use_container_width=True, type="primary"):
                     if nome_cx:
@@ -3986,13 +4422,14 @@ def pagina_carteira() -> None:
                         db.setdefault("caixinhas", []).append({
                             "id": novo_cx_id, "nome": nome_cx.title(), "banco": banco_cx.title() if banco_cx else "Nubank",
                             "saldo": float(saldo_inicial_cx) + float(rendimento_cx), "guardado_inicial": float(saldo_inicial_cx),
-                            "rendimento": float(rendimento_cx), "data_criacao": hoje_s
+                            "rendimento": float(rendimento_cx), "percentual_cdi": float(pct_cdi_in),
+                            "data_criacao": hoje_s, "data_ultimo_rendimento": hoje_s
                         })
                         registrar_mov_caixinha(novo_cx_id, "entrada", saldo_inicial_cx, hoje_s, "Valor inicial")
                         if rendimento_cx > 0:
-                            registrar_mov_caixinha(novo_cx_id, "rendimento", rendimento_cx, hoje_s, "Rendimento acumulado")
+                            registrar_mov_caixinha(novo_cx_id, "rendimento", rendimento_cx, hoje_s, "Rendimento acumulado inicial")
                         salvar_dados(db)
-                        st.toast(f"Caixinha '{nome_cx.title()}' criada com sucesso!", icon="📦")
+                        st.toast(f"Caixinha '{nome_cx.title()}' criada a {pct_cdi_in:.0f}% do CDI!", icon="📦")
                         st.rerun()
 
         if not caixinhas_lista:
@@ -4000,10 +4437,30 @@ def pagina_carteira() -> None:
         else:
             for cx in caixinhas_lista:
                 saldo_cx = float(cx.get("saldo", 0.0))
+                pct_cx = float(cx.get("percentual_cdi", 150.0))
+                taxa_anual_cx = cdi_anual_oficial * (pct_cx / 100.0)
                 m_cx = [m for m in movs_todas if m["caixinha_id"] == cx["id"]]
                 tot_g = sum(float(m["valor"]) for m in m_cx if m["tipo"] == "entrada")
                 tot_r = sum(float(m["valor"]) for m in m_cx if m["tipo"] == "saida")
                 tot_rend = sum(float(m["valor"]) for m in m_cx if m["tipo"] == "rendimento")
+
+                # Dias corridos para cálculo de alíquota do IR e IOF
+                dt_cria_str = cx.get("data_criacao") or hoje.strftime("%Y-%m-%d")
+                try:
+                    dt_cria_obj = datetime.strptime(dt_cria_str, "%Y-%m-%d").date()
+                except Exception:
+                    dt_cria_obj = hoje
+                dias_corridos_cx = max(1, (hoje - dt_cria_obj).days)
+
+                # Cálculo de impostos sobre o rendimento bruto acumulado
+                impostos_info = calcular_impostos_renda_fixa(tot_rend, dias_corridos_cx)
+                rend_liq_acum = impostos_info["liquido"]
+                saldo_liq_est = (saldo_cx - tot_rend) + tot_rend - impostos_info["ir"] - impostos_info["iof"]
+
+                # Rendimento diário e mensal estimado com o saldo atual
+                r_dia_cx = cdi_diario_oficial * (pct_cx / 100.0)
+                ganho_dia_est = saldo_cx * r_dia_cx
+                ganho_mes_est = saldo_cx * (((1.0 + r_dia_cx) ** 21) - 1.0)
 
                 with st.container(border=True):
                     col_card, col_acoes_cx = st.columns([3.4, 2.2], vertical_alignment="center")
@@ -4011,12 +4468,23 @@ def pagina_carteira() -> None:
                     with col_card:
                         md(f"""
                         <div>
-                          <div class="asset-tk">📦 {html.escape(cx['nome'])} <span class="chip chip-caixinhas">{html.escape(cx.get('banco', 'Banco'))}</span></div>
+                          <div class="asset-tk">
+                            📦 {html.escape(cx['nome'])} 
+                            <span class="chip chip-caixinhas">{html.escape(cx.get('banco', 'Nubank'))}</span>
+                            <span class="chip" style="background:#EDE9FE;color:#6D28D9;border:1px solid #DDD6FE;font-weight:700">⚡ {pct_cx:.0f}% do CDI ({taxa_anual_cx:.2f}% a.a.)</span>
+                          </div>
                           <div style="font-size:1.7rem;font-weight:900;color:#15803D;margin:4px 0;letter-spacing:-.03em;font-variant-numeric:tabular-nums">{fmt_moeda(saldo_cx)}</div>
-                          <div style="display:flex;gap:18px;font-size:.8rem;color:#64748B;flex-wrap:wrap">
+                          <div style="display:flex;gap:18px;font-size:.8rem;color:#475569;flex-wrap:wrap;margin-bottom:6px">
                             <span>⬆️ Guardei: <b>{fmt_moeda(tot_g)}</b></span>
                             <span>⬇️ Retirei: <b>{fmt_moeda(tot_r)}</b></span>
-                            <span>📈 Rendimento: <b>{fmt_moeda(tot_rend)}</b></span>
+                            <span>📈 Rendimento Bruto: <b style="color:#15803D">+{fmt_moeda(tot_rend)}</b></span>
+                          </div>
+                          <div style="display:flex;gap:14px;font-size:.76rem;color:#64748B;flex-wrap:wrap;background:#F8FAFC;padding:6px 10px;border-radius:8px;border:1px solid #E2E8F0">
+                            <span>🏛️ IR ({impostos_info['aliquota_ir']:.1f}%): <b>-{fmt_moeda(impostos_info['ir'])}</b></span>
+                            <span>📉 IOF: <b>-{fmt_moeda(impostos_info['iof'])}</b></span>
+                            <span>💵 Líquido: <b style="color:#0F766E">+{fmt_moeda(rend_liq_acum)}</b></span>
+                            <span>📊 Saldo Líquido: <b>{fmt_moeda(saldo_liq_est)}</b></span>
+                            <span>⚡ Rende hoje: <b>+{fmt_moeda(ganho_dia_est)}/dia útil</b> (~{fmt_moeda(ganho_mes_est)}/mês)</span>
                           </div>
                         </div>
                         """)
@@ -4058,6 +4526,7 @@ def pagina_carteira() -> None:
                                 ed_nom_cx = st.text_input("Nome da Caixinha", value=cx["nome"], key=f"ed_nom_cx_{cx['id']}")
                                 ed_bco_cx = st.text_input("Banco", value=cx.get("banco", "Nubank"), key=f"ed_bco_cx_{cx['id']}")
                                 ed_sal_cx = st.number_input("Saldo atual (R$)", value=float(cx.get("saldo", 0.0)), key=f"ed_sal_cx_{cx['id']}")
+                                ed_pct_cx = st.number_input("% do CDI", min_value=10.0, max_value=500.0, value=float(cx.get("percentual_cdi", 150.0)), step=10.0, key=f"ed_pct_cx_{cx['id']}")
                                 if st.button("Salvar Edição", key=f"btn_e_cx_{cx['id']}", type="primary", use_container_width=True):
                                     diff = float(ed_sal_cx) - float(cx.get("saldo", 0.0))
                                     if abs(diff) > 0.005:
@@ -4065,6 +4534,7 @@ def pagina_carteira() -> None:
                                     cx["nome"] = ed_nom_cx.title()
                                     cx["banco"] = ed_bco_cx.title()
                                     cx["saldo"] = float(ed_sal_cx)
+                                    cx["percentual_cdi"] = float(ed_pct_cx)
                                     salvar_dados(db)
                                     st.toast("Caixinha atualizada!")
                                     st.rerun()
@@ -4075,6 +4545,43 @@ def pagina_carteira() -> None:
                                 db["caixinhas_mov"] = [m for m in db["caixinhas_mov"] if m["caixinha_id"] != cx["id"]]
                                 salvar_dados(db)
                                 st.rerun()
+
+            # Simulador interativo de rendimento CDI futuro
+            with st.expander("🧮 Simulador de Rendimento da Caixinha (150% do CDI)"):
+                st.markdown(f"Simule quanto seu dinheiro rende a **{rend_turbo_anual:.2f}% ao ano** (150% do CDI oficial de {cdi_anual_oficial:.2f}% a.a.) calculando capitalização diária por dias úteis, com separação de IR e rendimento líquido.")
+                sim_c1, sim_c2 = st.columns(2)
+                sim_valor = sim_c1.number_input("Valor a simular (R$)", min_value=10.0, value=5000.0, step=500.0, key="sim_val_cdi")
+                sim_pct = sim_c2.number_input("Percentual do CDI (%)", min_value=50.0, max_value=300.0, value=150.0, step=10.0, key="sim_pct_cdi")
+
+                periodos_sim = [
+                    ("1 Dia Útil", 1, 1),
+                    ("1 Mês (21 dias úteis)", 21, 30),
+                    ("6 Meses (126 dias úteis)", 126, 180),
+                    ("1 Ano (252 dias úteis)", 252, 365),
+                    ("2 Anos (504 dias úteis)", 504, 730),
+                ]
+                linhas_sim = []
+                for rot_p, d_u, d_c in periodos_sim:
+                    calc_sim = calcular_rendimento_caixinha(sim_valor, sim_pct, d_u, d_c, cdi_anual_oficial)
+                    linhas_sim.append({
+                        "Período": rot_p,
+                        "Dias Úteis": d_u,
+                        "Rendimento Bruto": fmt_moeda(calc_sim["rendimento_bruto"]),
+                        "Alíquota IR": f"{calc_sim['aliquota_ir']:.1f}%",
+                        "Imposto de Renda": f"-{fmt_moeda(calc_sim['ir'])}",
+                        "IOF": f"-{fmt_moeda(calc_sim['iof'])}" if calc_sim['iof'] > 0 else "Isento",
+                        "Rendimento Líquido": f"+{fmt_moeda(calc_sim['rendimento_liquido'])}",
+                        "Saldo Final Líquido": fmt_moeda(calc_sim["saldo_liquido"])
+                    })
+                st.dataframe(pd.DataFrame(linhas_sim), use_container_width=True, hide_index=True)
+                md(f"""
+                <div class="insight" style="font-size:.82rem;margin-top:.6rem">
+                  <div>
+                    <b>Metodologia B3 / BACEN:</b> Rendimento diário = <code>(1 + CDI/100)^(1/252) - 1</code> multiplicado por <code>{sim_pct/100:.2f}</code>.
+                    O rendimento acumula por dias úteis. Imposto de Renda segue a tabela regressiva legal de Renda Fixa (22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% acima de 2 anos).
+                  </div>
+                </div>
+                """)
 
     with aba_vendas:
         lista_vendas = db.get("vendas", [])
@@ -4225,8 +4732,8 @@ def pagina_cartao() -> None:
         mes_fat_idx = st.selectbox("Mês da fatura", range(1, 13), index=st.session_state["fatura_mes_num"] - 1, format_func=lambda x: MESES_PT[x-1], key="sel_mfat", label_visibility="collapsed")
         st.session_state["fatura_mes_num"] = mes_fat_idx
     with c_f2:
-        anos_opcoes = [hoje.year - 1, hoje.year, hoje.year + 1, hoje.year + 2]
-        idx_ano = anos_opcoes.index(st.session_state["fatura_ano_num"]) if st.session_state["fatura_ano_num"] in anos_opcoes else 1
+        anos_opcoes = [hoje.year - 2, hoje.year - 1, hoje.year, hoje.year + 1, hoje.year + 2]
+        idx_ano = anos_opcoes.index(st.session_state["fatura_ano_num"]) if st.session_state["fatura_ano_num"] in anos_opcoes else 2
         ano_fat = st.selectbox("Ano da fatura", anos_opcoes, index=idx_ano, key="sel_afat", label_visibility="collapsed")
         st.session_state["fatura_ano_num"] = ano_fat
 
@@ -4234,11 +4741,57 @@ def pagina_cartao() -> None:
     ano_sel = st.session_state["fatura_ano_num"]
     fatura_chave_sel = f"{ano_sel:04d}-{mes_sel:02d}"
     mes_fat_nome = MESES_PT[mes_sel - 1]
+    fatura_atual_real_chave = f"{hoje.year:04d}-{hoje.month:02d}"
+    eh_fatura_passada = fatura_chave_sel < fatura_atual_real_chave
+    status_paga = fatura_chave_sel in db.get("faturas_pagas", [])
 
-    with st.expander("Lançar nova compra no cartão de crédito"):
+    # Navegação rápida entre mês passado, fatura atual e próximo mês
+    mes_ant_num = 12 if mes_sel == 1 else mes_sel - 1
+    ano_ant_num = ano_sel - 1 if mes_sel == 1 else ano_sel
+    mes_ant_nome = MESES_PT[mes_ant_num - 1]
+
+    mes_prox_num = 1 if mes_sel == 12 else mes_sel + 1
+    ano_prox_num = ano_sel + 1 if mes_sel == 12 else ano_sel
+    mes_prox_nome = MESES_PT[mes_prox_num - 1]
+
+    c_nav_ant, c_nav_atual, c_nav_prox = st.columns([1.3, 1.2, 1.3])
+    with c_nav_ant:
+        st.button(f"⬅️ Mês Passado ({mes_ant_nome[:3]}/{str(ano_ant_num)[2:]})", use_container_width=True,
+                  on_click=_ir_para_fatura, args=(mes_ant_num, ano_ant_num), key="btn_nav_fat_ant")
+    with c_nav_atual:
+        st.button(f"💳 Fatura Atual ({MESES_PT[hoje.month - 1][:3]}/{str(hoje.year)[2:]})", use_container_width=True,
+                  type="primary" if (mes_sel == hoje.month and ano_sel == hoje.year) else "secondary",
+                  on_click=_ir_para_fatura, args=(hoje.month, hoje.year), key="btn_nav_fat_atual")
+    with c_nav_prox:
+        st.button(f"➡️ Próximo Mês ({mes_prox_nome[:3]}/{str(ano_prox_num)[2:]})", use_container_width=True,
+                  on_click=_ir_para_fatura, args=(mes_prox_num, ano_prox_num), key="btn_nav_fat_prox")
+
+    if eh_fatura_passada:
+        col_inf, col_acao_paga = st.columns([3.2, 1.2], vertical_alignment="center")
+        with col_inf:
+            if status_paga:
+                md(f"<div class='insight' style='background:#F0FDF4;border-color:#BBF7D0;margin-top:.4rem'><div>✅ <b>Fatura de {mes_fat_nome}/{ano_sel} (Mês Passado):</b> Marcada como <b>PAGA</b>.</div></div>")
+            else:
+                md(f"<div class='insight' style='background:#FFFBEB;border-color:#FDE68A;margin-top:.4rem'><div>⏳ <b>Fatura de {mes_fat_nome}/{ano_sel} (Mês Passado):</b> Consta como <b>Pendente</b>.</div></div>")
+        with col_acao_paga:
+            if status_paga:
+                if st.button("Marcar como Pendente", key=f"btn_alt_paga_{fatura_chave_sel}", use_container_width=True):
+                    db["faturas_pagas"] = [x for x in db.get("faturas_pagas", []) if x != fatura_chave_sel]
+                    salvar_dados(db)
+                    st.rerun()
+            else:
+                if st.button("Marcar como Paga", key=f"btn_alt_paga_{fatura_chave_sel}", type="primary", use_container_width=True):
+                    db.setdefault("faturas_pagas", []).append(fatura_chave_sel)
+                    salvar_dados(db)
+                    st.toast(f"Fatura de {mes_fat_nome}/{ano_sel} marcada como paga!", icon="✅")
+                    st.rerun()
+
+    with st.expander("Lançar compra ou reembolso no cartão de crédito"):
         with st.form("form_compra_cartao", clear_on_submit=True):
+            tipo_operacao = st.radio("Tipo do Lançamento:", ["Compra", "Reembolso / Estorno"], horizontal=True,
+                                     help="Se for reembolso/estorno, o valor será retirado (abatido) do total da fatura.")
             f_c1, f_c2, f_c3 = st.columns(3)
-            desc_compra = f_c1.text_input("Nome da Compra / Loja", placeholder="Ex: Celular, Zara, Curso").strip()
+            desc_compra = f_c1.text_input("Descrição / Loja", placeholder="Ex: Devolução loja, Mercado, Cinema...").strip()
             cartao_nome = f_c2.selectbox("Cartão Utilizado", LISTA_CARTOES)
             categoria_compra = f_c3.selectbox("Categoria", LISTA_CATEGORIAS_CARTAO)
 
@@ -4249,49 +4802,51 @@ def pagina_cartao() -> None:
             cashback_compra = f_c7.number_input("Cashback Ganho (R$)", min_value=0.0, value=0.0, step=0.50)
 
             f_c8, f_c9, f_c10 = st.columns([1.2, 1.4, 1.4])
-            dt_compra = f_c8.date_input("Data da Compra", value=hoje_br(), format="DD/MM/YYYY")
+            dt_compra = f_c8.date_input("Data do Lançamento", value=hoje_br(), format="DD/MM/YYYY")
 
             mes_sug = dt_compra.month + (1 if dt_compra.day >= DIA_FECHAMENTO_CARTAO else 0)
             ano_sug = dt_compra.year + (1 if mes_sug > 12 else 0)
             mes_sug = 1 if mes_sug > 12 else mes_sug
 
             mes_cobranca_idx = f_c9.selectbox("Fatura da 1ª Parcela (Mês):", range(1, 13), index=mes_sug - 1, format_func=lambda x: MESES_PT[x-1])
-            ano_cobranca = f_c10.selectbox("Ano da Fatura:", [ano_sug, ano_sug + 1], index=0)
+            ano_cobranca = f_c10.selectbox("Ano da Fatura:", [ano_sug - 1, ano_sug, ano_sug + 1], index=1)
 
-            if st.form_submit_button("Lançar compra no cartão", use_container_width=True, type="primary"):
+            if st.form_submit_button("Lançar no cartão", use_container_width=True, type="primary"):
                 if desc_compra:
                     p_calc = float(val_parc_compra) if val_parc_compra > 0 else (float(val_total_compra) / int(parc_total_compra))
                     db.setdefault("cartao_compras", []).append({
-                        "id": int(datetime.now().timestamp() * 1000), "descricao": desc_compra, "cartao": cartao_nome,
+                        "id": int(datetime.now().timestamp() * 1000), "tipo": tipo_operacao,
+                        "descricao": desc_compra, "cartao": cartao_nome,
                         "categoria": categoria_compra, "valor_total": float(val_total_compra), "parcelas_total": int(parc_total_compra),
-                        "valor_parcela": float(p_calc), "cashback_reais": float(cashback_compra), "data_compra": dt_compra.strftime("%Y-%m-%d"),
+                        "valor_parcela": float(p_calc), "cashback_reais": float(cashback_compra) if tipo_operacao == "Compra" else 0.0,
+                        "data_compra": dt_compra.strftime("%Y-%m-%d"),
                         "mes_inicio_fatura": f"{ano_cobranca:04d}-{mes_cobranca_idx:02d}"
                     })
                     salvar_dados(db)
-                    st.toast("Compra cadastrada!", icon="💳")
+                    st.toast(f"{tipo_operacao} cadastrada!", icon="💳")
                     st.rerun()
 
     compras_cartao = db.get("cartao_compras", [])
     total_fatura_mes_sel = 0.0
+    total_reembolso_mes_sel = 0.0
     total_cashback_mes_sel = 0.0
     total_divida_futura_restante = 0.0
     total_parcelada_futura_apos_sel = 0.0
     compras_do_mes = []
     projecao_meses = {}
 
-    fatura_atual_real_chave = f"{hoje.year:04d}-{hoje.month:02d}"
-
     for c in compras_cartao:
         v_tot = float(c["valor_total"])
         p_tot = int(c["parcelas_total"])
         v_parc = float(c.get("valor_parcela", v_tot / max(p_tot, 1)))
+        eh_reemb = eh_reembolso_item(c)
         try:
             dt_compra_obj = datetime.strptime(c["data_compra"], "%Y-%m-%d").date()
         except Exception:
             dt_compra_obj = hoje
         mes_compra_chave = f"{dt_compra_obj.year:04d}-{dt_compra_obj.month:02d}"
 
-        if mes_compra_chave == fatura_chave_sel:
+        if mes_compra_chave == fatura_chave_sel and not eh_reemb:
             total_cashback_mes_sel += float(c.get("cashback_reais", 0.0))
 
         ano_ini, mes_ini = inicio_fatura_compra(c)
@@ -4302,41 +4857,49 @@ def pagina_cartao() -> None:
             mes_real = ((mes_num - 1) % 12) + 1
             fat_chave = f"{ano_num:04d}-{mes_real:02d}"
 
-            projecao_meses[fat_chave] = projecao_meses.get(fat_chave, 0.0) + v_parc
+            sinal = -1.0 if eh_reemb else 1.0
+            projecao_meses[fat_chave] = projecao_meses.get(fat_chave, 0.0) + (v_parc * sinal)
 
-            # Dívida parcelada restante: considera compras parceladas (p_tot > 1) que ainda possuem parcelas a pagar
             if p_tot > 1 and fat_chave >= fatura_atual_real_chave:
-                total_divida_futura_restante += v_parc
+                total_divida_futura_restante += (v_parc * sinal)
             if p_tot > 1 and fat_chave > fatura_chave_sel:
-                total_parcelada_futura_apos_sel += v_parc
+                total_parcelada_futura_apos_sel += (v_parc * sinal)
 
             if fat_chave == fatura_chave_sel:
                 parc_restantes_depois = max(0, p_tot - p_idx)
                 saldo_devedor_depois = parc_restantes_depois * v_parc
-                total_fatura_mes_sel += v_parc
+                if eh_reemb:
+                    total_fatura_mes_sel -= v_parc
+                    total_reembolso_mes_sel += v_parc
+                else:
+                    total_fatura_mes_sel += v_parc
 
                 compras_do_mes.append({
-                    "id": c["id"], "descricao": c["descricao"], "cartao": c["cartao"], "categoria": c["categoria"],
+                    "id": c["id"], "tipo": c.get("tipo", "Compra"), "eh_reembolso": eh_reemb,
+                    "descricao": c["descricao"], "cartao": c["cartao"], "categoria": c["categoria"],
                     "valor_total": v_tot, "parcela_atual": p_idx, "parcelas_total": p_tot, "valor_parcela": v_parc,
                     "parcelas_restantes": parc_restantes_depois, "saldo_restante": saldo_devedor_depois,
-                    "cashback": float(c.get("cashback_reais", 0.0)) if mes_compra_chave == fatura_chave_sel else 0.0,
+                    "cashback": float(c.get("cashback_reais", 0.0)) if mes_compra_chave == fatura_chave_sel and not eh_reemb else 0.0,
                     "data_compra": c["data_compra"], "ano_inicio": ano_ini, "mes_inicio": mes_ini
                 })
 
-    total_divida_que_falta = sum(it["saldo_restante"] for it in compras_do_mes)
+    total_divida_que_falta = sum(it["saldo_restante"] for it in compras_do_mes if not it["eh_reembolso"])
+
+    stat_reemb_html = f"<div class='stat'><div class='stat-n' style='color:#059669'>-{fmt_moeda(total_reembolso_mes_sel)}</div><div class='stat-l'>Reembolsos abatidos</div></div>" if total_reembolso_mes_sel > 0 else ""
 
     md(f"""
     <div class="stats" style="margin-top:1.2rem">
-      <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(total_fatura_mes_sel)}</div><div class="stat-l">Fatura em {mes_fat_nome}/{ano_sel}</div></div>
+      <div class="stat"><div class="stat-n" style="color:#2563EB">{fmt_moeda(max(0.0, total_fatura_mes_sel))}</div><div class="stat-l">Fatura em {mes_fat_nome}/{ano_sel}</div></div>
       <div class="stat"><div class="stat-n" style="color:#15803D">+{fmt_moeda(total_cashback_mes_sel)}</div><div class="stat-l">Cashback no mês</div></div>
+      {stat_reemb_html}
       <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_divida_que_falta)}</div><div class="stat-l">Dívida parcelada restante</div></div>
-      <div class="stat"><div class="stat-n">{len(compras_do_mes)}</div><div class="stat-l">Compras nesta fatura</div></div>
+      <div class="stat"><div class="stat-n">{len(compras_do_mes)}</div><div class="stat-l">Lançamentos nesta fatura</div></div>
     </div>
     """)
 
     if projecao_meses:
         chaves_futuras = sorted(k for k in projecao_meses.keys() if k >= fatura_atual_real_chave)
-        chaves_proj = chaves_futuras[:12]
+        chaves_proj = chaves_futuras[:12] if chaves_futuras else [fatura_chave_sel]
 
         secao("Visão das faturas", "Quanto você paga em cada fatura e como a dívida parcelada vai diminuindo.")
         _media_f = sum(projecao_meses[k] for k in chaves_proj) / max(len(chaves_proj), 1)
@@ -4351,12 +4914,16 @@ def pagina_cartao() -> None:
                 if compras_do_mes:
                     _cat = {}
                     for it in compras_do_mes:
-                        _cat[it["categoria"]] = _cat.get(it["categoria"], 0.0) + it["valor_parcela"]
-                    _cat_ord = sorted(_cat.items(), key=lambda kv: kv[1], reverse=True)
-                    _rot = [k for k, _ in _cat_ord]
-                    _val = [v for _, v in _cat_ord]
-                    _cor = [SEQ_CORES[i % len(SEQ_CORES)] for i in range(len(_rot))]
-                    mostrar(fig_donut(_rot, _val, _cor, f"<b>{fmt_moeda(total_fatura_mes_sel, 0)}</b><br><span style='font-size:11px;color:#64748B'>fatura</span>", ALTURA_CARD, legenda=True))
+                        v_cat_item = -it["valor_parcela"] if it["eh_reembolso"] else it["valor_parcela"]
+                        _cat[it["categoria"]] = _cat.get(it["categoria"], 0.0) + v_cat_item
+                    _cat_ord = sorted([kv for kv in _cat.items() if kv[1] > 0], key=lambda kv: kv[1], reverse=True)
+                    if _cat_ord:
+                        _rot = [k for k, _ in _cat_ord]
+                        _val = [v for _, v in _cat_ord]
+                        _cor = [SEQ_CORES[i % len(SEQ_CORES)] for i in range(len(_rot))]
+                        mostrar(fig_donut(_rot, _val, _cor, f"<b>{fmt_moeda(max(0.0, total_fatura_mes_sel), 0)}</b><br><span style='font-size:11px;color:#64748B'>fatura</span>", ALTURA_CARD, legenda=True))
+                    else:
+                        vazio("Reembolsos cobriram todos os gastos nesta fatura.")
                 else:
                     vazio("Nenhuma compra nesta fatura.")
 
@@ -4371,21 +4938,33 @@ def pagina_cartao() -> None:
                 if compras_do_mes:
                     _cartao = {}
                     for it in compras_do_mes:
-                        _cartao[it["cartao"]] = _cartao.get(it["cartao"], 0.0) + it["valor_parcela"]
-                    _cs = sorted(_cartao.items(), key=lambda kv: kv[1], reverse=True)
-                    mostrar(fig_barras_simples([k for k, _ in _cs], [v for _, v in _cs], COR_AZUL, ALTURA_CARD, min_barras=6))
+                        v_c_item = -it["valor_parcela"] if it["eh_reembolso"] else it["valor_parcela"]
+                        _cartao[it["cartao"]] = _cartao.get(it["cartao"], 0.0) + v_c_item
+                    _cs = sorted([kv for kv in _cartao.items() if kv[1] > 0], key=lambda kv: kv[1], reverse=True)
+                    if _cs:
+                        mostrar(fig_barras_simples([k for k, _ in _cs], [v for _, v in _cs], COR_AZUL, ALTURA_CARD, min_barras=6))
+                    else:
+                        vazio("Sem saldo devedor por cartão nesta fatura.")
                 else:
                     vazio("Nenhuma compra nesta fatura.")
 
-        secao("Abrir outra fatura", "Selecione o mês para ver todas as compras e parcelas dele.")
-        chaves_botoes = [k for k in chaves_futuras if int(k.split("-")[0]) in anos_opcoes][:12]
+        secao("Histórico e próximas faturas", "Selecione qualquer mês (passado ou futuro) para inspecionar a fatura completa.")
+        chaves_botoes = []
+        for delta in range(-6, 13):
+            m_k = hoje.month + delta
+            a_k = hoje.year + (m_k - 1) // 12
+            m_r = ((m_k - 1) % 12) + 1
+            chaves_botoes.append(f"{a_k:04d}-{m_r:02d}")
+
         for i in range(0, len(chaves_botoes), 6):
             linha = chaves_botoes[i:i + 6]
             cols_botoes = st.columns(6)
             for col_btn, k_chave in zip(cols_botoes, linha):
                 ano_k = int(k_chave.split("-")[0])
                 mes_k = int(k_chave.split("-")[1])
-                rotulo = f"{MESES_PT[mes_k - 1][:3]}/{str(ano_k)[2:]}\n{fmt_moeda(projecao_meses[k_chave])}"
+                val_fat_k = projecao_meses.get(k_chave, 0.0)
+                paga_badge = " ✓" if k_chave in db.get("faturas_pagas", []) else ""
+                rotulo = f"{MESES_PT[mes_k - 1][:3]}/{str(ano_k)[2:]}{paga_badge}\n{fmt_moeda(max(0.0, val_fat_k))}"
                 eh_sel = (mes_k == mes_sel and ano_k == ano_sel)
                 col_btn.button(
                     rotulo, key=f"btn_p_{k_chave}", use_container_width=True,
@@ -4393,20 +4972,27 @@ def pagina_cartao() -> None:
                     on_click=_ir_para_fatura, args=(mes_k, ano_k)
                 )
 
-    secao(f"Compras e parcelas na fatura de {mes_fat_nome}/{ano_sel}")
+    secao(f"Lançamentos na fatura de {mes_fat_nome}/{ano_sel}")
     if not compras_do_mes:
-        vazio(f"Nenhuma compra cai na fatura de {mes_fat_nome}/{ano_sel}.", "💳")
+        vazio(f"Nenhum lançamento cai na fatura de {mes_fat_nome}/{ano_sel}.", "💳")
     else:
         for item in compras_do_mes:
+            eh_reemb = item.get("eh_reembolso", False)
             with st.container(border=True):
                 c_nom, c_parc, c_sal, c_cash, c_ed, c_del = st.columns([1.6, 1.4, 1.3, 1.1, 0.4, 0.4], vertical_alignment="center")
-                c_nom.markdown(f"<div class='asset-tk'>{html.escape(item['descricao'])} <span class='chip chip-cartao'>{html.escape(item['cartao'])}</span></div><div class='asset-sub'>{html.escape(item['categoria'])} · {datetime.strptime(item['data_compra'], '%Y-%m-%d').strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
-                c_parc.markdown(f"<div class='cell-l'>Parcela {item['parcela_atual']} de {item['parcelas_total']}</div><div class='cell-big'>{fmt_moeda(item['valor_parcela'])}</div>", unsafe_allow_html=True)
-                c_sal.markdown(f"<div style='color:#B91C1C;font-weight:700;font-size:.92rem'>Falta: {fmt_moeda(item['saldo_restante'])}</div><div class='asset-sub'>Restam {item['parcelas_restantes']} parcelas</div>", unsafe_allow_html=True)
+                tag_reemb = "<span class='chip' style='background:#DCFCE7;color:#15803D;border:1px solid #BBF7D0;font-weight:700'>↩️ Reembolso</span>" if eh_reemb else ""
+                c_nom.markdown(f"<div class='asset-tk'>{html.escape(item['descricao'])} <span class='chip chip-cartao'>{html.escape(item['cartao'])}</span> {tag_reemb}</div><div class='asset-sub'>{html.escape(item['categoria'])} · {datetime.strptime(item['data_compra'], '%Y-%m-%d').strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
+                if eh_reemb:
+                    c_parc.markdown(f"<div class='cell-l'>Abatimento da fatura</div><div class='cell-big' style='color:#15803D'>-{fmt_moeda(item['valor_parcela'])}</div>", unsafe_allow_html=True)
+                    c_sal.markdown("<div style='color:#15803D;font-weight:700;font-size:.92rem'>Descontado</div><div class='asset-sub'>Retirado da fatura</div>", unsafe_allow_html=True)
+                else:
+                    c_parc.markdown(f"<div class='cell-l'>Parcela {item['parcela_atual']} de {item['parcelas_total']}</div><div class='cell-big'>{fmt_moeda(item['valor_parcela'])}</div>", unsafe_allow_html=True)
+                    c_sal.markdown(f"<div style='color:#B91C1C;font-weight:700;font-size:.92rem'>Falta: {fmt_moeda(item['saldo_restante'])}</div><div class='asset-sub'>Restam {item['parcelas_restantes']} parcelas</div>", unsafe_allow_html=True)
                 c_cash.markdown(f"<span class='badge-status status-alta'>+{fmt_moeda(item['cashback'])}</span>" if item["cashback"] > 0 else "<span style='font-size:.78rem;color:#94A3B8'>Sem cashback</span>", unsafe_allow_html=True)
 
                 with c_ed:
                     with st.popover(":material/edit:", use_container_width=True):
+                        e_tipo = st.selectbox("Tipo", ["Compra", "Reembolso / Estorno"], index=1 if eh_reemb else 0, key=f"ed_t_{item['id']}")
                         e_desc = st.text_input("Descrição", value=item["descricao"], key=f"ed_d_{item['id']}")
                         idx_cat_c = LISTA_CATEGORIAS_CARTAO.index(item["categoria"]) if item["categoria"] in LISTA_CATEGORIAS_CARTAO else 0
                         e_cat = st.selectbox("Categoria", LISTA_CATEGORIAS_CARTAO, index=idx_cat_c, key=f"ed_cat_{item['id']}")
@@ -4417,6 +5003,7 @@ def pagina_cartao() -> None:
                         if st.button("Salvar Edição", key=f"btn_e_{item['id']}", type="primary"):
                             for cp in db["cartao_compras"]:
                                 if cp["id"] == item["id"]:
+                                    cp["tipo"] = e_tipo
                                     cp["descricao"] = e_desc
                                     cp["categoria"] = e_cat
                                     cp["valor_total"] = float(e_tot)
@@ -4455,22 +5042,41 @@ def pagina_conta_debito() -> None:
         with st.form("form_nova_transacao", clear_on_submit=True):
             t1, t2 = st.columns(2)
             tipo_transacao = t1.radio("Tipo:", ["Entrada (+)", "Saída (-)"], horizontal=True)
-            desc_transacao = t2.text_input("Descrição / O que foi", placeholder="Ex: Salário, Vale, Compra no Débito...").strip()
+            desc_transacao = t2.text_input("Descrição / O que foi", placeholder="Ex: Salário, Vale, Compra em dinheiro em nota...").strip()
 
             t3, t4, t5 = st.columns(3)
             val_transacao = t3.number_input("Valor (R$)", min_value=0.01, value=150.0, step=10.0)
             cat_transacao = t4.selectbox("Categoria", LISTA_CATEGORIAS_DEBITO)
             dt_transacao = t5.date_input("Data da Operação", value=hoje_br(), format="DD/MM/YYYY")
 
-            if st.form_submit_button("Lançar na conta", use_container_width=True, type="primary"):
+            t6, t7 = st.columns(2)
+            meio_transacao = t6.selectbox("Forma de Pagamento / Meio:", ["💳 Conta Corrente / PIX / Débito", "💵 Dinheiro em Nota (Espécie / Físico)"], index=0)
+            eh_reembolso_cartao = t7.checkbox("↩️ É reembolso a retirar da fatura do cartão?", help="Se marcado, deduzirá também o valor da fatura do cartão de crédito!")
+
+            if st.form_submit_button("Lançar movimentação", use_container_width=True, type="primary"):
                 if desc_transacao:
+                    eh_nota_f = ("Dinheiro em Nota" in meio_transacao) or (cat_transacao == "Dinheiro em Nota")
+                    novo_id_t = int(datetime.now().timestamp() * 1000)
                     db.setdefault("transacoes_debito", []).append({
-                        "id": int(datetime.now().timestamp() * 1000), "tipo": tipo_transacao,
+                        "id": novo_id_t, "tipo": tipo_transacao,
                         "descricao": desc_transacao, "categoria": cat_transacao, "valor": float(val_transacao),
-                        "data": dt_transacao.strftime("%Y-%m-%d")
+                        "data": dt_transacao.strftime("%Y-%m-%d"),
+                        "meio": "Dinheiro em Nota" if eh_nota_f else "Conta / PIX"
                     })
+                    if eh_reembolso_cartao:
+                        mes_fat_sug = dt_transacao.month + (1 if dt_transacao.day >= DIA_FECHAMENTO_CARTAO else 0)
+                        ano_fat_sug = dt_transacao.year + (1 if mes_fat_sug > 12 else 0)
+                        mes_fat_sug = 1 if mes_fat_sug > 12 else mes_fat_sug
+                        db.setdefault("cartao_compras", []).append({
+                            "id": novo_id_t + 1, "tipo": "Reembolso / Estorno",
+                            "descricao": f"Reembolso: {desc_transacao}", "cartao": "Nubank",
+                            "categoria": "Outros", "valor_total": float(val_transacao),
+                            "parcelas_total": 1, "valor_parcela": float(val_transacao),
+                            "cashback_reais": 0.0, "data_compra": dt_transacao.strftime("%Y-%m-%d"),
+                            "mes_inicio_fatura": f"{ano_fat_sug:04d}-{mes_fat_sug:02d}"
+                        })
                     salvar_dados(db)
-                    st.toast(f"{tipo_transacao} registrada!", icon="💸")
+                    st.toast(f"{tipo_transacao} registrada com sucesso!", icon="💸")
                     st.rerun()
 
     transacoes_todas = db.get("transacoes_debito", [])
@@ -4480,11 +5086,18 @@ def pagina_conta_debito() -> None:
     total_sai = sum(float(t["valor"]) for t in transacoes_mes if t["tipo"] == "Saída (-)")
     saldo_conta_mes = total_ent - total_sai
 
+    total_nota_ent = sum(float(t["valor"]) for t in transacoes_mes if t["tipo"] == "Entrada (+)" and (t.get("meio") == "Dinheiro em Nota" or t.get("categoria") == "Dinheiro em Nota"))
+    total_nota_sai = sum(float(t["valor"]) for t in transacoes_mes if t["tipo"] == "Saída (-)" and (t.get("meio") == "Dinheiro em Nota" or t.get("categoria") == "Dinheiro em Nota"))
+    total_nota_mov = total_nota_ent + total_nota_sai
+
+    stat_nota_html = f"<div class='stat'><div class='stat-n' style='color:#D97706'>{fmt_moeda(total_nota_mov)}</div><div class='stat-l'>Dinheiro em nota ({'+' if total_nota_ent>=total_nota_sai else ''}{fmt_moeda(total_nota_ent - total_nota_sai)})</div></div>" if total_nota_mov > 0 else ""
+
     md(f"""
     <div class="stats" style="margin-top:1.2rem">
       <div class="stat"><div class="stat-n" style="color:#15803D">+{fmt_moeda(total_ent)}</div><div class="stat-l">Total de entradas em {nome_mes_deb}</div></div>
-      <div class="stat"><div class="stat-n" style="color:#B91C1C">-{fmt_moeda(total_sai)}</div><div class="stat-l">Total de saídas no débito/PIX em {nome_mes_deb}</div></div>
+      <div class="stat"><div class="stat-n" style="color:#B91C1C">-{fmt_moeda(total_sai)}</div><div class="stat-l">Total de saídas em {nome_mes_deb}</div></div>
       <div class="stat"><div class="stat-n" style="color:{'#15803D' if saldo_conta_mes >= 0 else '#B91C1C'}">{fmt_moeda(saldo_conta_mes)}</div><div class="stat-l">Saldo da conta em {nome_mes_deb}</div></div>
+      {stat_nota_html}
     </div>
     """)
 
@@ -4542,19 +5155,32 @@ def pagina_conta_debito() -> None:
                 else:
                     vazio("Nenhuma saída neste mês.")
 
-    secao(f"Extrato de movimentações — {nome_mes_deb}/{ano_deb}")
-    if not transacoes_mes:
-        vazio(f"Nenhuma movimentação lançada em {nome_mes_deb}/{ano_deb}.", "🏦")
+    col_ext_tit, col_ext_flt = st.columns([2.4, 1.4], vertical_alignment="center")
+    with col_ext_tit:
+        secao(f"Extrato de movimentações — {nome_mes_deb}/{ano_deb}")
+    with col_ext_flt:
+        flt_meio_deb = st.selectbox("Filtrar por meio:", ["Todas as movimentações", "💵 Apenas Dinheiro em Nota", "💳 Apenas Conta / PIX"], key="flt_meio_deb", label_visibility="collapsed")
+
+    transacoes_exibidas = transacoes_mes
+    if flt_meio_deb == "💵 Apenas Dinheiro em Nota":
+        transacoes_exibidas = [t for t in transacoes_mes if t.get("meio") == "Dinheiro em Nota" or t.get("categoria") == "Dinheiro em Nota"]
+    elif flt_meio_deb == "💳 Apenas Conta / PIX":
+        transacoes_exibidas = [t for t in transacoes_mes if not (t.get("meio") == "Dinheiro em Nota" or t.get("categoria") == "Dinheiro em Nota")]
+
+    if not transacoes_exibidas:
+        vazio(f"Nenhuma movimentação encontrada para o filtro selecionado em {nome_mes_deb}/{ano_deb}.", "🏦")
     else:
-        for t in sorted(transacoes_mes, key=lambda x: (x["data"], x["id"]), reverse=True):
+        for t in sorted(transacoes_exibidas, key=lambda x: (x["data"], x["id"]), reverse=True):
             eh_ent = t["tipo"] == "Entrada (+)"
             cor_val = "#15803D" if eh_ent else "#B91C1C"
             sinal = "+" if eh_ent else "-"
             chip_t = "chip-entrada" if eh_ent else "chip-saida"
+            eh_nota = t.get("meio") == "Dinheiro em Nota" or t.get("categoria") == "Dinheiro em Nota"
+            chip_nota = "<span class='chip' style='background:#FEF3C7;color:#B45309;border:1px solid #FDE68A;font-weight:700'>💵 Dinheiro em Nota</span>" if eh_nota else ""
 
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns([1.8, 1.1, 0.55, 0.45], vertical_alignment="center")
-                c1.markdown(f"<div class='asset-tk'>{html.escape(t['descricao'])} <span class='chip {chip_t}'>{t['tipo']}</span></div><div class='asset-sub'>{html.escape(t['categoria'])} · {datetime.strptime(t['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
+                c1.markdown(f"<div class='asset-tk'>{html.escape(t['descricao'])} <span class='chip {chip_t}'>{t['tipo']}</span> {chip_nota}</div><div class='asset-sub'>{html.escape(t['categoria'])} · {datetime.strptime(t['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}</div>", unsafe_allow_html=True)
                 c2.markdown(f"<span style='font-size:1.15rem;font-weight:800;color:{cor_val};font-variant-numeric:tabular-nums'>{sinal} {fmt_moeda(t['valor'])}</span>", unsafe_allow_html=True)
 
                 with c3:
@@ -4564,12 +5190,14 @@ def pagina_conta_debito() -> None:
                         e_val = st.number_input("Valor (R$)", value=float(t["valor"]), key=f"e_v_deb_{t['id']}")
                         idx_cat_deb = LISTA_CATEGORIAS_DEBITO.index(t.get("categoria", "Outros")) if t.get("categoria") in LISTA_CATEGORIAS_DEBITO else 0
                         e_cat = st.selectbox("Categoria", LISTA_CATEGORIAS_DEBITO, index=idx_cat_deb, key=f"e_c_deb_{t['id']}")
+                        e_meio = st.selectbox("Meio", ["💳 Conta Corrente / PIX", "💵 Dinheiro em Nota"], index=1 if eh_nota else 0, key=f"e_m_deb_{t['id']}")
 
                         if st.button("Salvar Edição", key=f"btn_e_deb_{t['id']}", type="primary"):
                             t["tipo"] = e_tipo
                             t["descricao"] = e_desc
                             t["valor"] = float(e_val)
                             t["categoria"] = e_cat
+                            t["meio"] = "Dinheiro em Nota" if "Dinheiro em Nota" in e_meio else "Conta / PIX"
                             salvar_dados(db)
                             st.toast("Atualizado!")
                             st.rerun()
