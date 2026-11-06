@@ -1222,6 +1222,13 @@ h1, h2, h3, h4 {
 .meter-f b { color: var(--ink); font-weight: 700; }
 .prog-wrap { background: #E2E8F0; border-radius: 999px; height: 10px; overflow: hidden; }
 .prog-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #14B8A6, #0F766E); transition: width .4s ease; }
+.seg-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: #E2E8F0; margin: .4rem 0 .9rem; }
+.seg-bar > div { height: 100%; transition: width .4s ease; }
+.seg-bar > div + div { border-left: 2px solid #FFFFFF; }
+.ex-legenda { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .82rem; color: var(--ink-3); }
+.ex-leg { display: inline-flex; align-items: center; gap: 7px; }
+.ex-leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.ex-leg b { color: var(--ink); font-weight: 700; }
 
 /* ---------- Chart Header & Legends ---------- */
 .chart-h {
@@ -3859,9 +3866,26 @@ def pagina_resumo_diagnostico() -> None:
 
     _comprometido = fat_card + tot_cfix + sai_deb
     _pct_comp = (_comprometido / ent_m * 100) if ent_m > 0 else (100.0 if _comprometido > 0 else 0.0)
-    _cor_m = "linear-gradient(90deg,#34D399,#059669)" if _pct_comp < 60 else ("linear-gradient(90deg,#FBBF24,#D97706)" if _pct_comp < 85 else "linear-gradient(90deg,#F87171,#DC2626)")
     _txt_m = "Saudável" if _pct_comp < 60 else ("Atenção" if _pct_comp < 85 else "Crítico")
     _cor_txt_m = "#047857" if _pct_comp < 60 else ("#B45309" if _pct_comp < 85 else "#BE123C")
+    _excedente = max(0.0, _comprometido - ent_m)
+    _sobra = max(0.0, ent_m - _comprometido)
+    _base_barra = max(ent_m, _comprometido, 1.0)
+    _segs = [("Cartão", fat_card, "#2563EB"), ("Contas fixas", tot_cfix, "#E11D48"), ("Débito/PIX", sai_deb, "#F59E0B"), ("Livre", _sobra, "#059669")]
+    _barra_seg = "".join(
+        f"<div title='{n}: {fmt_moeda(v)}' style='width:{v / _base_barra * 100:.2f}%;height:100%;background:{c}'></div>"
+        for n, v, c in _segs if v > 0
+    )
+    _legenda_seg = "".join(
+        f"<span class='ex-leg'><i style='background:{c}'></i>{n} <b>{fmt_moeda(v)}</b></span>"
+        for n, v, c in _segs if v > 0
+    )
+    if ent_m <= 0 and _comprometido <= 0:
+        _frase_m = "Ainda não há entradas nem despesas registradas neste mês."
+    elif _excedente > 0:
+        _frase_m = f"Suas despesas superam as entradas em <b>{fmt_moeda(_excedente)}</b>. Revise os gastos deste mês."
+    else:
+        _frase_m = f"Você ainda tem <b>{fmt_moeda(_sobra)}</b> livres ({100 - _pct_comp:.0f}% da renda)."
 
     secao("Situação financeira do mês", "Os quatro números que definem o seu mês.")
     md(f"""
@@ -3877,11 +3901,13 @@ def pagina_resumo_diagnostico() -> None:
     md(f"""
     <div class="meter-box">
       <div class="meter-top">
-        <div><div class="meter-l">Renda comprometida com despesas</div><div class="meter-v">{_pct_comp:.1f}%</div></div>
+        <div><div class="meter-l">Despesas do mês em relação à entrada</div><div class="meter-v">{_pct_comp:.0f}%</div></div>
         <div style="text-align:right"><div class="meter-l">Situação</div><div class="meter-v" style="font-size:1.15rem;color:{_cor_txt_m}">{_txt_m}</div></div>
       </div>
-      {barra_progresso(_pct_comp, _cor_m, 12)}
-      <div class="meter-f"><span>Despesas: <b>{fmt_moeda(_comprometido)}</b></span><span>Entradas: <b>{fmt_moeda(ent_m)}</b></span></div>
+      <div class="seg-bar">{_barra_seg}</div>
+      <div class="ex-legenda">{_legenda_seg}</div>
+      <div class="meter-f"><span>{_frase_m}</span></div>
+      <div class="meter-f" style="margin-top:.35rem"><span>Entradas do mês: <b>{fmt_moeda(ent_m)}</b></span><span>Despesas do mês: <b>{fmt_moeda(_comprometido)}</b></span></div>
     </div>
     """)
     col_r1, col_r2 = st.columns(2, gap="large")
