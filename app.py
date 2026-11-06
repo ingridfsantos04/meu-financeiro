@@ -3901,7 +3901,7 @@ def pagina_resumo_diagnostico() -> None:
     md(f"""
     <div class="meter-box">
       <div class="meter-top">
-        <div><div class="meter-l">Despesas do mês em relação à entrada</div><div class="meter-v">{_pct_comp:.0f}%</div></div>
+        <div><div class="meter-l">Despesas do mês em relação à entrada</div><div class="meter-v">{min(_pct_comp, 100):.0f}%</div></div>
         <div style="text-align:right"><div class="meter-l">Situação</div><div class="meter-v" style="font-size:1.15rem;color:{_cor_txt_m}">{_txt_m}</div></div>
       </div>
       <div class="seg-bar">{_barra_seg}</div>
