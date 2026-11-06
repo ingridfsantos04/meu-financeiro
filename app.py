@@ -969,6 +969,55 @@ h1, h2, h3, h4 {
   letter-spacing: .08em;
 }
 
+.ex-card {
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 1.1rem;
+  border-top: 3px solid var(--ex-c, var(--brand));
+}
+.ex-card::before { display: none; }
+.ex-card .stat-l { order: 0; }
+.ex-card .stat-n { order: 1; font-size: 1.7rem; margin-top: 6px; }
+.ex-desc { order: 2; font-size: .78rem; color: var(--ink-3); line-height: 1.4; margin-top: 8px; font-weight: 500; }
+.ex-devo { --ex-c: #E11D48; }
+.ex-invest { --ex-c: #7C3AED; }
+.ex-pode { --ex-c: #059669; }
+.ex-nao { --ex-c: #F59E0B; }
+
+.dv-wrap {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-sm);
+  overflow-x: auto;
+  margin-bottom: 1.6rem;
+}
+.dv-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.dv-table th {
+  text-align: left;
+  font-size: .7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-3);
+  background: #F8FAFC;
+  padding: .8rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.dv-table td {
+  padding: .85rem 1.1rem;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--ink-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dv-table tbody tr:last-child td { border-bottom: none; }
+.dv-table tbody tr:hover td { background: #F8FAFC; }
+.dv-table .num { text-align: right; white-space: nowrap; }
+.dv-nome { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--ink); }
+.dv-total { font-weight: 800 !important; color: var(--ink) !important; }
+
 .kpi { padding: 4px 2px 8px; }
 .kpi-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .kpi-l { color: var(--ink-3); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2260,8 +2309,10 @@ def consolidar_ativos_duplicados():
 consolidar_ativos_duplicados()
 
 # Mantém o cookie de sessão sempre com o token mais recente
-if st.session_state.get("auth_session"):
-    gravar_cookie_sessao(getattr(st.session_state["auth_session"], "refresh_token", None))
+_rt_atual = getattr(st.session_state.get("auth_session"), "refresh_token", None)
+if _rt_atual and st.session_state.get("_rt_gravado") != _rt_atual:
+    gravar_cookie_sessao(_rt_atual)
+    st.session_state["_rt_gravado"] = _rt_atual
 
 # ------------------------------------------------------------------------------
 # ACOMPANHAR A DATA: se o dia/mês virar com o site aberto, os filtros acompanham
@@ -2350,7 +2401,7 @@ components.html("""
     b.style.display = (precisa && n) ? 'flex' : 'none';
   }
   ciclo();
-  setInterval(ciclo, 600);
+  setInterval(ciclo, 1500);
 })();
 </script>
 """, height=0)
@@ -3767,7 +3818,7 @@ def pagina_visao_geral() -> None:
 # ==============================================================================
 def pagina_resumo_diagnostico() -> None:
     """Tela: Resumo."""
-    hero("Resumo", "Veja quanto você tem, o que não deve gastar no mês e quanto pode gastar com segurança.")
+    hero("Resumo Executivo", "A situação do seu mês em um só lugar: o que você deve, o que tem investido, o que está comprometido e quanto ainda pode gastar.")
 
     hoje = hoje_br()
     c_flt_title, c1, c2 = st.columns([2.6, 1.2, 0.9], vertical_alignment="center")
@@ -3806,24 +3857,28 @@ def pagina_resumo_diagnostico() -> None:
     if not dicas:
         dicas.append("<b>Parabéns!</b> Seu fluxo financeiro deste mês está equilibrado, seguro e pronto para continuar crescendo.")
 
-    md(f"""
-    <div class="stats">
-      <div class="stat"><div class="stat-n" style="color:#0B1220">{fmt_moeda(patrimonio_geral)}</div><div class="stat-l">1. Quanto dinheiro tenho no total</div></div>
-      <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(nao_deve_gastar)}</div><div class="stat-l">2. O que NÃO devo gastar (cartão + contas)</div></div>
-      <div class="stat"><div class="stat-n" style="color:#15803D">{fmt_moeda(pode_gastar_seguro)}</div><div class="stat-l">3. O que POSSO gastar com segurança</div></div>
-    </div>
-    """)
-
-    secao("Como o dinheiro do mês está distribuído", "Quanto da sua renda já está comprometido e quanto ainda está livre.")
     _comprometido = fat_card + tot_cfix + sai_deb
     _pct_comp = (_comprometido / ent_m * 100) if ent_m > 0 else (100.0 if _comprometido > 0 else 0.0)
     _cor_m = "linear-gradient(90deg,#34D399,#059669)" if _pct_comp < 60 else ("linear-gradient(90deg,#FBBF24,#D97706)" if _pct_comp < 85 else "linear-gradient(90deg,#F87171,#DC2626)")
     _txt_m = "Saudável" if _pct_comp < 60 else ("Atenção" if _pct_comp < 85 else "Crítico")
+    _cor_txt_m = "#047857" if _pct_comp < 60 else ("#B45309" if _pct_comp < 85 else "#BE123C")
+
+    secao("Situação financeira do mês", "Os quatro números que definem o seu mês.")
+    md(f"""
+    <div class="stats">
+      <div class="stat ex-card ex-devo"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(_comprometido)}</div><div class="stat-l">Quanto devo no mês</div><div class="ex-desc">Cartão, contas fixas e débito/PIX deste mês</div></div>
+      <div class="stat ex-card ex-invest"><div class="stat-n" style="color:#0B1220">{fmt_moeda(patrimonio_geral)}</div><div class="stat-l">Quanto tenho investido</div><div class="ex-desc">Bolsa, FIIs, cripto, dólar e caixinhas</div></div>
+      <div class="stat ex-card ex-pode"><div class="stat-n" style="color:#15803D">{fmt_moeda(pode_gastar_seguro)}</div><div class="stat-l">Posso gastar</div><div class="ex-desc">Sobra livre depois de tudo que já está comprometido</div></div>
+      <div class="stat ex-card ex-nao"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(nao_deve_gastar)}</div><div class="stat-l">Não posso gastar</div><div class="ex-desc">Cartão e contas fixas já reservados para pagar</div></div>
+    </div>
+    """)
+
+    secao("Nível de comprometimento da renda", "Quanto da sua entrada do mês já tem destino certo.")
     md(f"""
     <div class="meter-box">
       <div class="meter-top">
         <div><div class="meter-l">Renda comprometida com despesas</div><div class="meter-v">{_pct_comp:.1f}%</div></div>
-        <div style="text-align:right"><div class="meter-l">Situação</div><div class="meter-v" style="font-size:1.15rem">{_txt_m}</div></div>
+        <div style="text-align:right"><div class="meter-l">Situação</div><div class="meter-v" style="font-size:1.15rem;color:{_cor_txt_m}">{_txt_m}</div></div>
       </div>
       {barra_progresso(_pct_comp, _cor_m, 12)}
       <div class="meter-f"><span>Despesas: <b>{fmt_moeda(_comprometido)}</b></span><span>Entradas: <b>{fmt_moeda(ent_m)}</b></span></div>
@@ -5498,6 +5553,39 @@ def pagina_devedores() -> None:
           <div class="stat"><div class="stat-n" style="color:#15803D">{fmt_moeda(recebido_devedores_no_mes(chave_hoje))}</div><div class="stat-l">Recebido em {MESES_PT[hoje.month-1]}</div></div>
         </div>
         """)
+
+        mes_hoje_txt = MESES_PT[hoje.month-1]
+        resumo_pessoas = {}
+        for d in devedores_lista:
+            nome_p = d["nome"].strip().title()
+            rp = resumo_pessoas.setdefault(nome_p, {"previsto": 0.0, "recebido": 0.0, "atraso": 0.0, "falta": 0.0})
+            inf_p = calcular_atraso_real_divida(d)
+            rp["falta"] += inf_p["falta_total"]
+            rp["atraso"] += inf_p["valor_atraso"]
+            v_parc_p = _parcela_divida(d)
+            rp["previsto"] += sum(v_parc_p for dt_v in vencimentos_divida(d) if dt_v.strftime("%Y-%m") == chave_hoje)
+            rp["recebido"] += sum(float(pg.get("valor", 0.0)) for pg in d.get("pagamentos", []) if str(pg.get("data", "")).startswith(chave_hoje))
+
+        linhas_pessoas = []
+        for nome_p, rp in sorted(resumo_pessoas.items(), key=lambda kv: -kv[1]["falta"]):
+            ainda_mes = max(0.0, rp["previsto"] - rp["recebido"])
+            cor_atr = "#B91C1C" if rp["atraso"] > 0.005 else "#94A3B8"
+            linhas_pessoas.append(
+                f"<tr><td><div class='dv-nome'><span class='avatar' style='width:34px;height:34px;font-size:.74rem;background:#E6F6F4;color:#0F766E'>{html.escape(nome_p[:2].upper())}</span>{html.escape(nome_p)}</div></td>"
+                f"<td class='num'>{fmt_moeda(rp['previsto'])}</td>"
+                f"<td class='num' style='color:#15803D'>{fmt_moeda(rp['recebido'])}</td>"
+                f"<td class='num' style='color:#2563EB'>{fmt_moeda(ainda_mes)}</td>"
+                f"<td class='num' style='color:{cor_atr}'>{fmt_moeda(rp['atraso'])}</td>"
+                f"<td class='num dv-total'>{fmt_moeda(rp['falta'])}</td></tr>"
+            )
+        md(
+            "<div class='sec'><div class='sec-t'>Quanto cada pessoa me deve no mês</div>"
+            f"<div class='sec-sub'>Parcelas com vencimento em {mes_hoje_txt} e o que já foi recebido delas.</div></div>"
+            "<div class='dv-wrap'><table class='dv-table'><thead><tr>"
+            f"<th>Pessoa</th><th class='num'>Vence em {mes_hoje_txt}</th><th class='num'>Já pagou no mês</th>"
+            "<th class='num'>Ainda deve do mês</th><th class='num'>Em atraso</th><th class='num'>Total em aberto</th>"
+            "</tr></thead><tbody>" + "".join(linhas_pessoas) + "</tbody></table></div>"
+        )
 
         pessoas_agrupadas = {}
         for d in devedores_lista:
