@@ -3883,6 +3883,15 @@ def pagina_resumo_diagnostico() -> None:
         desc_saldo = "Informe em Movimentações para calcular com precisão"
         valor_saldo_txt = "Não informado"
 
+    modo_real = saldo_conta_val is not None
+    if modo_real:
+        ent_m = saldo_conta_val + sal_flx
+        fat_card = 0.0 if ch_diag in db.get("faturas_pagas", []) else fat_card
+        tot_cfix = sum(float(c["valor"]) for c in contas_m if c.get("status") != "pago")
+        sai_deb = 0.0
+    lbl_base = "Dinheiro disponível (saldo real)" if modo_real else "Entradas do mês"
+    lbl_comp = "Contas pendentes do mês" if modo_real else "Despesas do mês"
+
     dicas = []
     if ent_m > 0 and (fat_card / ent_m) > 0.40:
         dicas.append(f"<b>Atenção ao Cartão de Crédito:</b> Sua fatura consome {fat_card / ent_m * 100:.1f}% da sua renda mensal. O ideal é manter abaixo de 35% para não comprometer os próximos meses.")
@@ -3912,7 +3921,8 @@ def pagina_resumo_diagnostico() -> None:
     if ent_m <= 0 and _comprometido <= 0:
         _frase_m = "Ainda não há entradas nem despesas registradas neste mês."
     elif _excedente > 0:
-        _frase_m = f"Suas despesas superam as entradas em <b>{fmt_moeda(_excedente)}</b>. Revise os gastos deste mês."
+        _frase_m = (f"As contas pendentes superam o dinheiro disponível em <b>{fmt_moeda(_excedente)}</b>. Revise os gastos deste mês." if modo_real
+                    else f"Suas despesas superam as entradas em <b>{fmt_moeda(_excedente)}</b>. Revise os gastos deste mês.")
     else:
         _frase_m = f"Você ainda tem <b>{fmt_moeda(_sobra)}</b> livres ({100 - _pct_comp:.0f}% da renda)."
 
@@ -3947,13 +3957,13 @@ def pagina_resumo_diagnostico() -> None:
     md(f"""
     <div class="meter-box">
       <div class="meter-top">
-        <div><div class="meter-l">Despesas do mês em relação à entrada</div><div class="meter-v">{min(_pct_comp, 100):.0f}%</div></div>
+        <div><div class="meter-l">{'Contas pendentes em relação ao dinheiro disponível' if modo_real else 'Despesas do mês em relação à entrada'}</div><div class="meter-v">{min(_pct_comp, 100):.0f}%</div></div>
         <div style="text-align:right"><div class="meter-l">Situação</div><div class="meter-v" style="font-size:1.15rem;color:{_cor_txt_m}">{_txt_m}</div></div>
       </div>
       <div class="seg-bar">{_barra_seg}</div>
       <div class="ex-legenda">{_legenda_seg}</div>
       <div class="meter-f"><span>{_frase_m}</span></div>
-      <div class="meter-f" style="margin-top:.35rem"><span>Entradas do mês: <b>{fmt_moeda(ent_m)}</b></span><span>Despesas do mês: <b>{fmt_moeda(_comprometido)}</b></span></div>
+      <div class="meter-f" style="margin-top:.35rem"><span>{lbl_base}: <b>{fmt_moeda(ent_m)}</b></span><span>{lbl_comp}: <b>{fmt_moeda(_comprometido)}</b></span></div>
     </div>
     """)
     col_r1, col_r2 = st.columns(2, gap="large")
