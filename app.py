@@ -141,6 +141,7 @@ CLASSES_INVEST = ["Ações", "FIIs", "Renda Fixa", "Internacional", "Cripto", "D
 CLASSES_BOLSA_FORM = ["Ações", "FIIs", "Renda Fixa", "Internacional"]
 CLASSES_ALT = ["Cripto", "Dólar"]
 CORES_CLASSE = {
+    "Conta corrente": "#0F766E",
     "Ações": "#2563EB",
     "FIIs": "#7C3AED",
     "Renda Fixa": "#059669",
@@ -983,6 +984,7 @@ h1, h2, h3, h4 {
 .ex-invest { --ex-c: #7C3AED; }
 .ex-pode { --ex-c: #059669; }
 .ex-nao { --ex-c: #F59E0B; }
+.ex-saldo { --ex-c: #0F766E; }
 
 .dv-wrap {
   background: var(--paper);
@@ -2799,6 +2801,20 @@ def obter_caixinha_fluxo():
             return c
     return caixinhas[0]
 
+def saldo_conta_informado():
+    """Saldo real da conta corrente informado pelo usuário (None se nunca foi informado)."""
+    s = db.get("saldo_conta") or {}
+    if not s.get("data"):
+        return None
+    return float(s.get("valor", 0.0))
+
+def compromissos_pendentes_mes(chave):
+    """Contas fixas e fatura do cartão do mês que ainda não foram pagas."""
+    pend = sum(float(c["valor"]) for c in db.get("contas_fixas", []) if c["mes_ano"] == chave and c.get("status") != "pago")
+    if chave not in db.get("faturas_pagas", []):
+        pend += calcular_fatura_cartao_mes(chave)
+    return pend
+
 def saldo_caixinha_no_mes(cx, chave_mes=None):
     if not cx:
         return 0.0
@@ -3120,7 +3136,8 @@ else:
 caixinhas_lista = db.get("caixinhas", [])
 total_em_caixinhas = sum(float(c.get("saldo", 0.0)) for c in caixinhas_lista)
 patrimonio_investido_bolsa = float(df_ativos["valor_atual"].sum()) if not df_ativos.empty else 0.0
-patrimonio_total = patrimonio_investido_bolsa + total_em_caixinhas
+saldo_conta_atual = saldo_conta_informado() or 0.0
+patrimonio_total = patrimonio_investido_bolsa + total_em_caixinhas + saldo_conta_atual
 
 # ==============================================================================
 # BARRA DE COTAÇÕES AO VIVO
@@ -3779,6 +3796,8 @@ def pagina_visao_geral() -> None:
             with st.container(border=True):
                 titulo_grafico("Composição do patrimônio", "Distribuição por classe de ativo")
                 _itens = []
+                if saldo_conta_atual > 0:
+                    _itens.append(("Conta corrente", saldo_conta_atual))
                 if total_em_caixinhas > 0:
                     _itens.append(("Caixinhas", total_em_caixinhas))
                 for cl in CLASSES_INVEST:
@@ -3851,8 +3870,18 @@ def pagina_resumo_diagnostico() -> None:
     patrimonio_geral = tot_caixas + tot_invest
 
     nao_deve_gastar = fat_card + tot_cfix
-    recursos_totais = ent_m + sal_flx
-    pode_gastar_seguro = max(0.0, recursos_totais - (nao_deve_gastar + sai_deb))
+    saldo_conta_val = saldo_conta_informado()
+    if saldo_conta_val is not None:
+        pode_gastar_seguro = max(0.0, saldo_conta_val + sal_flx - compromissos_pendentes_mes(hoje.strftime("%Y-%m")))
+        desc_pode = "Saldo da conta, menos contas e fatura ainda não pagas do mês"
+        desc_saldo = f"Informado em {datetime.strptime(db['saldo_conta']['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}"
+        valor_saldo_txt = fmt_moeda(saldo_conta_val)
+    else:
+        recursos_totais = ent_m + sal_flx
+        pode_gastar_seguro = max(0.0, recursos_totais - (nao_deve_gastar + sai_deb))
+        desc_pode = "Sobra das entradas do mês, depois do que já está comprometido"
+        desc_saldo = "Informe em Movimentações para calcular com precisão"
+        valor_saldo_txt = "Não informado"
 
     dicas = []
     if ent_m > 0 and (fat_card / ent_m) > 0.40:
@@ -3887,13 +3916,30 @@ def pagina_resumo_diagnostico() -> None:
     else:
         _frase_m = f"Você ainda tem <b>{fmt_moeda(_sobra)}</b> livres ({100 - _pct_comp:.0f}% da renda)."
 
+    _saldo_rapido = db.get("saldo_conta") or {}
+    with st.container(border=True):
+        q1, q2, q3 = st.columns([1.4, 1, 0.8], vertical_alignment="bottom")
+        with q1:
+            saldo_rapido_in = st.number_input(
+                "Saldo atual da conta corrente (R$)", value=float(_saldo_rapido.get("valor", 0.0)), step=50.0, format="%.2f",
+                key="resumo_saldo_in", help="Copie o saldo do app do seu banco. Ele atualiza o Resumo e o patrimônio.")
+        with q2:
+            data_saldo_rapido = st.date_input("Data do saldo", value=hoje, format="DD/MM/YYYY", key="resumo_saldo_dt")
+        with q3:
+            if st.button("Atualizar saldo", type="primary", use_container_width=True, key="btn_resumo_saldo"):
+                db["saldo_conta"] = {"valor": float(saldo_rapido_in), "data": data_saldo_rapido.strftime("%Y-%m-%d")}
+                salvar_dados(db)
+                st.toast("Saldo atualizado.", icon="✅")
+                st.rerun()
+
     secao("Situação financeira do mês", "Os quatro números que definem o seu mês.")
     md(f"""
     <div class="stats">
       <div class="stat ex-card ex-devo"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(_comprometido)}</div><div class="stat-l">Quanto devo no mês</div><div class="ex-desc">Cartão, contas fixas e débito/PIX deste mês</div></div>
       <div class="stat ex-card ex-invest"><div class="stat-n" style="color:#0B1220">{fmt_moeda(patrimonio_geral)}</div><div class="stat-l">Quanto tenho investido</div><div class="ex-desc">Bolsa, FIIs, cripto, dólar e caixinhas</div></div>
-      <div class="stat ex-card ex-pode"><div class="stat-n" style="color:#15803D">{fmt_moeda(pode_gastar_seguro)}</div><div class="stat-l">Posso gastar</div><div class="ex-desc">Sobra livre depois de tudo que já está comprometido</div></div>
+      <div class="stat ex-card ex-pode"><div class="stat-n" style="color:#15803D">{fmt_moeda(pode_gastar_seguro)}</div><div class="stat-l">Posso gastar</div><div class="ex-desc">{desc_pode}</div></div>
       <div class="stat ex-card ex-nao"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(nao_deve_gastar)}</div><div class="stat-l">Não posso gastar</div><div class="ex-desc">Cartão e contas fixas já reservados para pagar</div></div>
+      <div class="stat ex-card ex-saldo"><div class="stat-n" style="color:#0F766E">{valor_saldo_txt}</div><div class="stat-l">Saldo em conta</div><div class="ex-desc">{desc_saldo}</div></div>
     </div>
     """)
 
@@ -5338,6 +5384,30 @@ def pagina_conta_debito() -> None:
         ano_deb = c2.selectbox("Ano", [hoje.year - 1, hoje.year, hoje.year + 1], index=1, key="deb_ano", label_visibility="collapsed")
     chave_deb_sel = f"{ano_deb:04d}-{mes_deb:02d}"
     nome_mes_deb = MESES_PT[mes_deb - 1]
+
+    _saldo_info = db.get("saldo_conta") or {}
+    with st.container(border=True):
+        s1, s2, s3 = st.columns([1.4, 1, 0.8], vertical_alignment="bottom")
+        with s1:
+            novo_saldo_conta = st.number_input(
+                "Saldo atual da conta corrente (R$)", value=float(_saldo_info.get("valor", 0.0)), step=50.0, format="%.2f",
+                key="saldo_conta_in", help="O valor que aparece no app do seu banco. Ele alimenta o patrimônio, o Resumo e os gráficos.")
+        with s2:
+            dt_saldo_conta = st.date_input("Data do saldo", value=hoje, format="DD/MM/YYYY", key="saldo_conta_dt")
+        with s3:
+            if st.button("Salvar saldo", type="primary", use_container_width=True, key="btn_saldo_conta"):
+                db["saldo_conta"] = {"valor": float(novo_saldo_conta), "data": dt_saldo_conta.strftime("%Y-%m-%d")}
+                salvar_dados(db)
+                st.toast("Saldo da conta atualizado.", icon="✅")
+                st.rerun()
+        if _saldo_info.get("data"):
+            try:
+                _dt_s_txt = datetime.strptime(_saldo_info["data"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                _dt_s_txt = str(_saldo_info["data"])
+            st.caption(f"Último saldo informado: {fmt_moeda(float(_saldo_info.get('valor', 0.0)))} em {_dt_s_txt}.")
+        else:
+            st.caption("Você ainda não informou o saldo da conta. Informe para o Resumo calcular o que pode gastar.")
 
     with st.expander("Lançar nova movimentação (entrada ou saída)"):
         with st.form("form_nova_transacao", clear_on_submit=True):
