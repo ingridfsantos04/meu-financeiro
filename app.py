@@ -3872,8 +3872,10 @@ def pagina_resumo_diagnostico() -> None:
     nao_deve_gastar = fat_card + tot_cfix
     saldo_conta_val = saldo_conta_informado()
     if saldo_conta_val is not None:
-        pode_gastar_seguro = max(0.0, saldo_conta_val + sal_flx - compromissos_pendentes_mes(hoje.strftime("%Y-%m")))
-        desc_pode = "Saldo da conta, menos contas e fatura ainda não pagas do mês"
+        _ch_hoje = hoje.strftime("%Y-%m")
+        _despesas_mes_total = calcular_fatura_cartao_mes(_ch_hoje) + sum(float(c["valor"]) for c in db.get("contas_fixas", []) if c["mes_ano"] == _ch_hoje)
+        pode_gastar_seguro = max(0.0, saldo_conta_val + sal_flx - _despesas_mes_total)
+        desc_pode = "Saldo da conta + Fluxo do Mês, menos todas as contas fixas e a fatura do cartão do mês"
         desc_saldo = f"Informado em {datetime.strptime(db['saldo_conta']['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}"
         valor_saldo_txt = fmt_moeda(saldo_conta_val)
     else:
