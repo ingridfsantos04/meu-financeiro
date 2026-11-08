@@ -2815,6 +2815,7 @@ MENU_ITENS = [
     "Minha Carteira",
     "Dividendos",
     "Cartão de Crédito",
+    "Dívida Parcelada",
     "Movimentações",
     "Devedores",
     "Metas"
@@ -2862,6 +2863,7 @@ with st.sidebar:
         "Minha Carteira": "💼  Minha Carteira",
         "Dividendos": "💰  Agenda de Dividendos",
         "Cartão de Crédito": "💳  Cartão de Crédito",
+        "Dívida Parcelada": "🧾  Dívida Parcelada",
         "Movimentações": "🏦  Movimentações",
         "Devedores": "🤝  Devedores",
         "Metas": "🎯  Metas Financeiras"
@@ -4859,6 +4861,10 @@ def pagina_cartao() -> None:
     if "fatura_ano_num" not in st.session_state:
         st.session_state["fatura_ano_num"] = hoje.year
 
+    def _ir_para_divida():
+        st.session_state["menu_nav"] = "Dívida Parcelada"
+        st.session_state["menu_nav_m"] = "Dívida Parcelada"
+
     def _ir_para_fatura(mes_k, ano_k):
         # Atualiza direto as chaves dos seletores (antes de serem desenhados),
         # senão o selectbox ignora o novo valor e volta para o mês antigo.
@@ -5038,6 +5044,7 @@ def pagina_cartao() -> None:
       <div class="stat"><div class="stat-n">{len(compras_do_mes)}</div><div class="stat-l">Lançamentos nesta fatura</div></div>
     </div>
     """)
+    st.button("Ver dívida parcelada restante →", key="btn_ver_divida_parcelada", on_click=_ir_para_divida, use_container_width=True)
 
     if projecao_meses:
         chaves_futuras = sorted(k for k in projecao_meses.keys() if k >= fatura_atual_real_chave)
@@ -5165,6 +5172,68 @@ def pagina_cartao() -> None:
 # ==============================================================================
 # TELA: CONTA & DÉBITO
 # ==============================================================================
+def pagina_divida_parcelada() -> None:
+    """Tela: compras parceladas do cartão que ainda têm parcelas em aberto."""
+    hero("Dívida Parcelada no Cartão", "Tudo que ainda falta pagar em compras parceladas: quantas parcelas restam e até quando.")
+
+    hoje = hoje_br()
+    chave_atual = f"{hoje.year:04d}-{hoje.month:02d}"
+    faturas_pagas = db.get("faturas_pagas", [])
+
+    itens = []
+    for c in db.get("cartao_compras", []):
+        p_tot = int(c.get("parcelas_total", 1))
+        if p_tot <= 1 or eh_reembolso_item(c):
+            continue
+        v_parc = float(c.get("valor_parcela", float(c.get("valor_total", 0.0)) / max(p_tot, 1)))
+        ano_ini, mes_ini = inicio_fatura_compra(c)
+        restantes = 0
+        ultima = (ano_ini, mes_ini)
+        for p_idx in range(1, p_tot + 1):
+            mes_num = mes_ini + (p_idx - 1)
+            ano_num = ano_ini + (mes_num - 1) // 12
+            mes_real = ((mes_num - 1) % 12) + 1
+            fat_chave = f"{ano_num:04d}-{mes_real:02d}"
+            ultima = (ano_num, mes_real)
+            if fat_chave >= chave_atual and fat_chave not in faturas_pagas:
+                restantes += 1
+        if restantes == 0:
+            continue
+        itens.append({
+            "descricao": c.get("descricao", ""), "cartao": c.get("cartao", ""), "categoria": c.get("categoria", ""),
+            "valor_parcela": v_parc, "parcelas_total": p_tot, "restantes": restantes,
+            "proxima": p_tot - restantes + 1, "falta": restantes * v_parc, "ate": ultima,
+        })
+
+    itens = sorted(itens, key=lambda it: (it["ate"], -it["falta"]))
+    total_falta = sum(it["falta"] for it in itens)
+    total_parcelas = sum(it["restantes"] for it in itens)
+    ultima_geral = max((it["ate"] for it in itens), default=None)
+    ate_geral_txt = f"{MESES_PT[ultima_geral[1] - 1]}/{ultima_geral[0]}" if ultima_geral else "-"
+
+    md(f"""
+    <div class="stats" style="margin-top:1.2rem">
+      <div class="stat"><div class="stat-n" style="color:#B91C1C">{fmt_moeda(total_falta)}</div><div class="stat-l">Falta pagar no total</div></div>
+      <div class="stat"><div class="stat-n">{len(itens)}</div><div class="stat-l">Compras parceladas</div></div>
+      <div class="stat"><div class="stat-n">{total_parcelas}</div><div class="stat-l">Parcelas restantes</div></div>
+      <div class="stat"><div class="stat-n">{ate_geral_txt}</div><div class="stat-l">Última parcela</div></div>
+    </div>
+    """)
+
+    secao("Compras parceladas em aberto", "Ordenadas pela data da última parcela.")
+    if not itens:
+        vazio("Nenhuma compra parcelada com parcelas em aberto.", "🎉")
+    else:
+        for it in itens:
+            with st.container(border=True):
+                c_nom, c_prox, c_val, c_rest, c_falta, c_ate = st.columns([2.0, 1.1, 1.0, 1.0, 1.2, 1.2], vertical_alignment="center")
+                c_nom.markdown(f"<div class='asset-tk'>{html.escape(it['descricao'])} <span class='chip chip-cartao'>{html.escape(it['cartao'])}</span></div><div class='asset-sub'>{html.escape(it['categoria'])}</div>", unsafe_allow_html=True)
+                c_prox.markdown(f"<div class='cell-l'>Próxima parcela</div><div class='cell-big'>{it['proxima']} de {it['parcelas_total']}</div>", unsafe_allow_html=True)
+                c_val.markdown(f"<div class='cell-l'>Valor da parcela</div><div class='cell-big'>{fmt_moeda(it['valor_parcela'])}</div>", unsafe_allow_html=True)
+                c_rest.markdown(f"<div class='cell-l'>Faltam</div><div class='cell-big'>{it['restantes']} parcelas</div>", unsafe_allow_html=True)
+                c_falta.markdown(f"<div class='cell-l'>Total que falta</div><div class='cell-big' style='color:#B91C1C'>{fmt_moeda(it['falta'])}</div>", unsafe_allow_html=True)
+                c_ate.markdown(f"<div class='cell-l'>Até quando</div><div class='cell-big'>{MESES_PT[it['ate'][1] - 1]} de {it['ate'][0]}</div>", unsafe_allow_html=True)
+
 def pagina_conta_debito() -> None:
     """Tela: Movimentações."""
     hero("Movimentações", "Controle tudo o que entra e sai da sua conta à vista: salário, vale, PIX e débito.")
@@ -5718,6 +5787,7 @@ PAGINAS = {
     "Minha Carteira": pagina_carteira,
     "Dividendos": pagina_dividendos,
     "Cartão de Crédito": pagina_cartao,
+    "Dívida Parcelada": pagina_divida_parcelada,
     "Movimentações": pagina_conta_debito,
     "Devedores": pagina_devedores,
     "Metas": pagina_metas,
