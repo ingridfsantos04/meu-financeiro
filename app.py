@@ -5547,8 +5547,11 @@ def pagina_devedores() -> None:
             "</tr></thead><tbody>" + "".join(linhas_pessoas) + "</tbody></table></div>"
         )
 
+        devedores_quitados = [d for d in devedores_lista if calcular_atraso_real_divida(d)["status"] == "quitado"]
         pessoas_agrupadas = {}
         for d in devedores_lista:
+            if calcular_atraso_real_divida(d)["status"] == "quitado":
+                continue
             pessoas_agrupadas.setdefault(d["nome"].strip().title(), []).append(d)
 
         for nome_pessoa, dividas in sorted(pessoas_agrupadas.items()):
@@ -5718,6 +5721,20 @@ def pagina_devedores() -> None:
                                         salvar_dados(db)
                                         st.toast("Recebimento removido.", icon="🗑️")
                                         st.rerun()
+
+        if devedores_quitados:
+            secao("Histórico de quitados", "Cobranças já pagas por completo, com o último recebimento.")
+            def _ultimo_pgto(d):
+                return max((str(p.get("data", "")) for p in d.get("pagamentos", [])), default="")
+            for dev in sorted(devedores_quitados, key=_ultimo_pgto, reverse=True):
+                ult = _ultimo_pgto(dev)
+                ult_txt = datetime.strptime(ult, "%Y-%m-%d").strftime("%d/%m/%Y") if ult else "—"
+                tot_rec = calcular_atraso_real_divida(dev)["total_pago"]
+                with st.container(border=True):
+                    h_nome, h_tot, h_ult = st.columns([2.2, 1.4, 1.4], vertical_alignment="center")
+                    h_nome.markdown(f"<div class='asset-tk'>{html.escape(dev['nome'].strip().title())}</div><div class='asset-sub'>{html.escape(dev['descricao'])} · {dev['parcelas_total']}x de {fmt_moeda(float(dev['valor_parcela']))}</div>", unsafe_allow_html=True)
+                    h_tot.markdown(f"<div class='cell-l'>Total recebido</div><div class='cell-big' style='color:#15803D'>{fmt_moeda(tot_rec)}</div>", unsafe_allow_html=True)
+                    h_ult.markdown(f"<div class='cell-l'>Último recebimento</div><div class='cell-big'>{ult_txt}</div>", unsafe_allow_html=True)
 
 # ==============================================================================
 # TELA: METAS
