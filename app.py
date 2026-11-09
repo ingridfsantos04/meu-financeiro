@@ -5517,6 +5517,8 @@ def pagina_devedores() -> None:
         mes_hoje_txt = MESES_PT[hoje.month-1]
         resumo_pessoas = {}
         for d in devedores_lista:
+            if calcular_atraso_real_divida(d)["status"] == "quitado":
+                continue
             nome_p = d["nome"].strip().title()
             rp = resumo_pessoas.setdefault(nome_p, {"previsto": 0.0, "recebido": 0.0, "atraso": 0.0, "falta": 0.0})
             inf_p = calcular_atraso_real_divida(d)
